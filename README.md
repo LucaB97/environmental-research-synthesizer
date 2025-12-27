@@ -5,10 +5,31 @@ Given a query (e.g., “How are local communities affected by large renewable pr
 The goal is to support evidence-based decision-making while minimizing hallucinations and maximizing transparency.
 
 ## Getting Started:
+### Prerequisites
 - Python 3.8.17+
-- Install dependencies: pip install -r requirements.txt
-- Place PDFs in data/papers/
-- Run preprocessing: python phase1___document_processing.py
+- Conda (strongly recommended, especially on Windows)
+
+### Environment setup
+Create and activate a conda environment:
+```bash
+conda create -n env-research-synth python=3.8.17
+conda activate env-research-synth
+```
+
+### Install dependencies
+- Install FAISS using conda (recommended to avoid compatibility issues):
+```bash
+conda install -c conda-forge faiss-cpu
+```
+- Python 3.8.17+
+- Install remaining dependencies: 
+```bash
+pip install -r requirements.txt
+```
+
+### Project setup
+- Place PDFs in `data/papers/`
+- Ensure `metadata.csv` is present in `data/`
 
 ## Project Phases
 ### Phase 0: Data Collection
@@ -16,6 +37,7 @@ The goal is to support evidence-based decision-making while minimizing hallucina
 - Create a `metadata.csv` file summarizing each paper: ID, title, year, publishing journal.
 
 ### Phase 1: Document Processing
+`python -m scripts.phase1___document_processing`
 - Convert PDFs to text.
 - Remove common headers, footers, and references.
 - Normalize whitespace.
@@ -23,8 +45,10 @@ The goal is to support evidence-based decision-making while minimizing hallucina
 - Save chunks in JSON format with metadata: chunk ID, paper ID, title, year.
 
 ### Phase 2: Semantic Retrieval
-- Embed chunks into vector representations.
-- Perform semantic search on user queries to retrieve relevant passages.
+• Embed chunks into vector representations:
+`python -m scripts.phase2___build_index`
+• Perform semantic search on user queries to retrieve relevant passages:
+`python -m scripts.phase2___evaluate_retrieval`
 
 ### Phase 3: LLM-Based Summarization (RAG)
 - Use a language model to synthesize retrieved passages into structured answers with citations.

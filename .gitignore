@@ -1,0 +1,3 @@
+# Phase 3 generated files
+data/embeddings.npy
+data/faiss.index
