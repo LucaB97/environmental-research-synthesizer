@@ -21,7 +21,6 @@ conda activate env-research-synth
 ```bash
 conda install -c conda-forge faiss-cpu
 ```
-- Python 3.8.17+
 - Install remaining dependencies: 
 ```bash
 pip install -r requirements.txt
@@ -47,6 +46,7 @@ pip install -r requirements.txt
 ### Phase 2: Semantic Retrieval
 • Embed chunks into vector representations:
 `python -m scripts.phase2___build_index`
+
 • Perform semantic search on user queries to retrieve relevant passages:
 `python -m scripts.phase2___evaluate_retrieval`
 

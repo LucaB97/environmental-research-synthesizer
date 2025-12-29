@@ -4,3 +4,4 @@ from . import chunking
 from . import embeddings
 from . import indexing
 from . import retriever
+from . import synthesizer

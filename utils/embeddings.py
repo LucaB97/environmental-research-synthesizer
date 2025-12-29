@@ -1,5 +1,4 @@
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 
 _model_cache = {}
@@ -19,7 +18,8 @@ def hf_embedding(text, model_name="all-MiniLM-L6-v2"):
         Returns:
             np.ndarray: A 1D NumPy array representing the text embedding.
         """
-
+    from sentence_transformers import SentenceTransformer
+    
     if model_name not in _model_cache:
         _model_cache[model_name] = SentenceTransformer(model_name)
     return _model_cache[model_name].encode(text, convert_to_numpy=True)

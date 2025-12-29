@@ -37,6 +37,7 @@ def create_chunks(text, metadata, idx, chunk_size=400, overlap=50):
         new_entry = {
             "chunk_id": chunk_id,
             "paper_id": str(metadata.paper_id.iloc[idx]),
+            "authors": str(metadata.authors.iloc[idx]),
             "title": str(metadata.title.iloc[idx]),
             "year": int(metadata.year.iloc[idx]),
             "text": chunk_text
