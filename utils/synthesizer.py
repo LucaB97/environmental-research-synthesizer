@@ -1,8 +1,11 @@
 import os
+import json
+
 
 class BaseLLMClient:
     def generate(self, prompt: str) -> str:
         raise NotImplementedError
+
 
 class OpenAIClient(BaseLLMClient):
     def __init__(self, model="gpt-4o-mini", max_tokens=400, temperature=0.2):
@@ -21,61 +24,58 @@ class OpenAIClient(BaseLLMClient):
         )
         return response.choices[0].message.content
 
-class Synthesizer:
-    def __init__(self, llm_client):
+
+
+class ResearchSynthesisEngine:
+    """
+    Synthesizes research answers using a structured JSON contract.
+
+    Expected output schema:
+    {
+        "in_scope": bool,
+        "answer": list,
+        "limitations": list
+    }
+    """
+    def __init__(self, llm_client, prompt_template):
         if not hasattr(llm_client, "generate"):
             raise ValueError("llm_client must implement a .generate(prompt) method")
         self.llm = llm_client
+        self.prompt_template = prompt_template
 
     def build_prompt(self, question, chunks):
         sources_text = ""
         for c in chunks:
             sources_text += f"""
-    --- SOURCE START ---
-    Citation: [{c['authors']}, {c['year']}]
-    Title: {c['title']}
-    Paper ID: {c['paper_id']}
-    Content:
-    {c['text']}
-    --- SOURCE END ---
-    """
-
-        return f"""
-    You are an expert research assistant specialized in environmental and social impact analysis.
-    You synthesize evidence from peer-reviewed academic sources only.
-
-    STRICT RULES:
-    - Use ONLY the information contained in the provided sources.
-    - Do NOT use prior knowledge, assumptions, or general world knowledge.
-    - Do NOT speculate or infer beyond what is explicitly supported.
-    - Every factual statement MUST be supported by at least one cited source.
-    - If the sources do NOT provide evidence relevant to the question, you MUST say so explicitly.
-    - Do NOT fabricate citations or force citations where no evidence exists.
-
-    {sources_text}
-
-    TASK:
-    Using ONLY the sources above, answer the following question:
-
-    "{question}"
-
-    OUTPUT FORMAT (follow exactly):
-
-    Answer:
-    - 3–5 bullet points synthesizing the key findings that directly address the question.
-    - If sources report conflicting findings, explicitly describe the disagreement and cite the respective sources.
-    - If NO relevant evidence exists, include a single bullet stating that the sources do not address the question.
-
-    Citations:
-    - List all citations used in the Answer section in the format [authors, year].
-    - If no relevant evidence exists, write exactly:
-    "No relevant citations available."
-
-    Limitations:
-    - Briefly describe gaps, uncertainties, or limitations in the available evidence.
-    - If the sources do not address the question at all, state this clearly.
-    """
+SOURCE:
+Citation: {c['authors']}, {c['year']}
+Title: {c['title']}
+Content:
+{c['text']}
+"""
+        prompt = self.prompt_template.replace("{{SOURCES}}", sources_text).replace("{{QUESTION}}", question)
+        return prompt
 
     def synthesize(self, question, chunks):
         prompt = self.build_prompt(question, chunks)
-        return self.llm.generate(prompt)
+        raw_output = self.llm.generate(prompt)
+
+        try:
+            parsed = json.loads(raw_output)
+
+            # Structural checks (domain-level)
+            assert "in_scope" in parsed
+            assert isinstance(parsed["in_scope"], bool)
+
+            if not parsed["in_scope"]:
+                parsed["answer"] = []
+                
+            assert "answer" in parsed
+            assert "limitations" in parsed
+
+            return parsed  # ← plain dict
+
+        except Exception as e:
+            raise ValueError(
+                f"Invalid LLM output.\nRaw output:\n{raw_output}\nError: {e}"
+            )

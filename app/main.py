@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from fastapi import Request
 
 from app.dependencies import load_system
-from app.schemas import QueryRequest, QueryResponse, RetrievedChunk
+from app.schemas import QueryRequest, QueryResponse, AnswerBullet
+from app.utils.citations import extract_citations, build_sources_from_citations
 
 
 app = FastAPI(
@@ -27,29 +28,28 @@ def query_endpoint(request: QueryRequest, req: Request):
     retriever = req.app.state.retriever
     synthesizer = req.app.state.synthesizer
 
-    results = retriever.search(
+    retrieved_chunks = retriever.search(
         request.question,
         top_k=request.top_k
     )
 
     answer = synthesizer.synthesize(
         request.question,
-        results
+        retrieved_chunks
     )
 
-    retrieved_chunks = [
-        RetrievedChunk(
-            paper_id=c["paper_id"],
-            title=c["title"],
-            authors=c["authors"],
-            year=c["year"],
-            text=c["text"]
-        )
-        for c in results
-    ]
+    if not answer["in_scope"]:
+        sources = []
+    else:
+        cited_refs = extract_citations(answer["answer"])
+        sources = build_sources_from_citations(retrieved_chunks, cited_refs)
+
 
     return QueryResponse(
         question=request.question,
-        retrieved_chunks=retrieved_chunks,
-        answer=answer
+        in_scope=answer["in_scope"],
+        answer=[AnswerBullet(**b) for b in answer["answer"]],
+        limitations=answer["limitations"],
+        sources=sources,
+        meta={"chunks_retrieved": len(retrieved_chunks)}
     )
