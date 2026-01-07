@@ -48,9 +48,11 @@ class ResearchSynthesisEngine:
         for c in chunks:
             sources_text += f"""
 SOURCE:
-Citation: {c['authors']}, {c['year']}
-Title: {c['title']}
-Content:
+paper_id: {c['paper_id']}
+authors: {c['authors']}
+year: {c['year']}
+title: {c['title']}
+content:
 {c['text']}
 """
         prompt = self.prompt_template.replace("{{SOURCES}}", sources_text).replace("{{QUESTION}}", question)

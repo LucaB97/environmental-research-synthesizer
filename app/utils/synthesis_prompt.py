@@ -18,7 +18,7 @@ JSON SCHEMA:
   "answer": [
     {
       "text": "Concise, evidence-based statement grounded in the sources. The statement MUST specify the study context (e.g., country, region, policy setting, or dataset).",
-      "citations": ["Author et al., Year"]
+      "citations": ["paper_id"]
     }
   ],
   "limitations": [
@@ -34,6 +34,7 @@ INSTRUCTIONS:
 - If the sources partially address the question:
   - Set "in_scope" to true
   - Include ONLY claims directly supported by the sources
+  - Use the exact paper_id provided in the sources for citations. Do NOT invent identifiers.
 - When numerical or monetary estimates are reported in the sources, include them explicitly.
 - If "answer" is non-empty, "limitations" MUST contain at least one item.
 

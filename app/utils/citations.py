@@ -10,8 +10,7 @@ def extract_citations(answer_bullets):
     """
     citations = set()
     for bullet in answer_bullets:
-        for c in bullet.get("citations", []):
-            citations.add(c)
+        citations.update(bullet.get("citations", []))
     return citations
 
 
@@ -29,13 +28,13 @@ def build_sources_from_citations(chunks, cited_refs):
     sources = {}
 
     for c in chunks:
-        ref = f"{c['authors']}, {c['year']}"
-        if ref in cited_refs and c["paper_id"] not in sources:
+        if c["paper_id"] in cited_refs:
             sources[c["paper_id"]] = {
                 "paper_id": c["paper_id"],
                 "title": c["title"],
                 "authors": c["authors"],
-                "year": c["year"]
+                "year": c["year"],
+                "journal": c.get("journal")
             }
 
     return list(sources.values())

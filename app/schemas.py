@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 
 class QueryRequest(BaseModel):
@@ -33,6 +33,10 @@ class Source(BaseModel):
     title: str = Field(description="Title of the academic paper")
     authors: str = Field(description="Authors of the paper")
     year: int = Field(description="Publication year")
+    journal: Optional[str] = Field(
+        None,
+        description="Journal or conference where the paper was published"
+    )
 
 
 class QueryResponse(BaseModel):
