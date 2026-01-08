@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request, HTTPException
 
 from app.dependencies import load_system
 from app.schemas import QueryRequest, QueryResponse, AnswerBullet
-from app.utils.citations import extract_citations, build_sources_from_citations
+from app.utils.citations import resolve_answer_citations, extract_citations, build_sources_from_citations
 
 
 app = FastAPI(
@@ -65,6 +65,11 @@ def query_endpoint(request: QueryRequest, req: Request):
             meta={"chunks_retrieved": 0},
         )
 
+    paper_lookup = {
+        c["paper_id"]: c
+        for c in retrieved_chunks
+    }
+
     #
     # --- Synthesis ---
     #
@@ -93,6 +98,11 @@ def query_endpoint(request: QueryRequest, req: Request):
     # --- Output preparation ---
     #
 
+    resolved_answer = resolve_answer_citations(
+        synthesis_output["answer"],
+        paper_lookup
+    )
+    
     if not synthesis_output["in_scope"]:
         sources = []
     else:
@@ -104,7 +114,7 @@ def query_endpoint(request: QueryRequest, req: Request):
     return QueryResponse(
         question=request.question,
         in_scope=synthesis_output["in_scope"],
-        answer=[AnswerBullet(**b) for b in synthesis_output["answer"]],
+        answer=[AnswerBullet(**b) for b in resolved_answer],
         limitations=synthesis_output["limitations"],
         sources=sources,
         meta={
