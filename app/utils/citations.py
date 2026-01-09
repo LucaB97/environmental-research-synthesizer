@@ -18,16 +18,16 @@ def format_author_year(authors, year):
 
 
 
-def resolve_answer_citations(answer_bullets, paper_lookup):
+def resolve_answer_citations(answer, paper_lookup):
     """
     Replace paper_id citations with human-readable labels.
     """
     resolved = []
 
-    for bullet in answer_bullets:
+    for sentence in answer:
         readable_citations = []
 
-        for pid in bullet["citations"]:
+        for pid in sentence["citations"]:
             paper = paper_lookup.get(pid)
             if not paper:
                 continue
@@ -36,26 +36,26 @@ def resolve_answer_citations(answer_bullets, paper_lookup):
             readable_citations.append(label)
 
         resolved.append({
-            "text": bullet["text"],
+            "text": sentence["text"],
             "citations": readable_citations
         })
 
     return resolved
 
 
-def extract_citations(answer_bullets):
+def extract_citations(answer):
     """
-    Extract unique citation strings from synthesized answer bullets.
+    Extract unique citation strings from synthesized answer sentences.
 
     Args:
-        answer_bullets (list[dict]): Each dict contains 'text' and 'citations'
+        answer_sentences (list[dict]): Each dict contains 'text' and 'citations'
 
     Returns:
         set[str]: Unique citation identifiers (e.g. "Author et al., 2023")
     """
     citations = set()
-    for bullet in answer_bullets:
-        citations.update(bullet.get("citations", []))
+    for sentence in answer:
+        citations.update(sentence.get("citations", []))
     return citations
 
 

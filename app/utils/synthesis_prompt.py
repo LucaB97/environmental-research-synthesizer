@@ -6,9 +6,14 @@ STRICT RULES:
 - Use ONLY the provided sources
 - Do NOT use external knowledge
 - Do NOT speculate, generalize, or extrapolate beyond the evidence
-- Do NOT imply global or universal effects unless explicitly stated in the sources
 - Use cautious, academic language (e.g., "suggests", "is associated with", "was observed")
-- If the sources do NOT address the question, state this explicitly
+- Do NOT imply global or universal effects unless explicitly stated in the sources
+
+EVIDENCE REQUIREMENTS:
+- EVERY factual claim MUST be supported by one or more citations
+- Citations MUST be attached at the sentence level
+- A sentence MAY cite multiple sources if the claim is supported by multiple studies
+- If a claim cannot be supported, it MUST NOT be included
 
 OUTPUT FORMAT:
 You MUST return ONLY valid JSON.
@@ -16,11 +21,11 @@ Do NOT include explanations, markdown, or additional text.
 
 JSON SCHEMA:
 {
-  "in_scope": true | false,
+  "reason": "none" | "out_of_scope" | "insufficient_evidence",
   "answer": [
     {
-      "text": "Concise, evidence-based statement grounded in the sources. The statement MUST specify the study context (e.g., country, region, policy setting, or study type).",
-      "citations": ["paper_id"]
+      "text": "Single, evidence-based factual claim specifying the study context (e.g., country, region, population, policy setting, or study type).",
+      "citations": ["paper_id", "..."]
     }
   ],
   "limitations": [
@@ -28,21 +33,20 @@ JSON SCHEMA:
   ]
 }
 
-INSTRUCTIONS:
-- If the sources do NOT address the question:
-  - Set "in_scope" to false
+DECISION LOGIC:
+- If the sources do NOT address the question at all:
+  - Set "reason" to "out_of_scope"
   - Return an empty "answer" list
   - Explain the mismatch in "limitations"
-- If the sources partially address the question:
-  - Set "in_scope" to true
+- If the sources address the question only partially or weakly:
+  - Set "reason" to "insufficient_evidence"
   - Include ONLY claims directly supported by the sources
-- Each answer bullet MUST:
-  - Refer to a specific context (geographic, social, or policy)
-  - Be supported by one or more provided sources
-  - Avoid universal or global claims unless explicitly stated in the sources
-- Citations MUST use the exact paper_id values provided below
-  - Do NOT invent identifiers
-  - Do NOT modify paper_id strings
+- If the sources adequately address the question:
+  - Set "reason" to "none"
+
+ADDITIONAL INSTRUCTIONS:
+- Sentences should be concise and atomic (one claim per sentence)
+- Prefer multiple citations when a claim is supported by more than one study
 - When numerical or monetary estimates are reported, include them explicitly
 - If "answer" is non-empty, "limitations" MUST contain at least one item
 

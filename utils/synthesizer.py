@@ -58,6 +58,30 @@ content:
         prompt = self.prompt_template.replace("{{SOURCES}}", sources_text).replace("{{QUESTION}}", question)
         return prompt
 
+    # def synthesize(self, question, chunks):
+    #     prompt = self.build_prompt(question, chunks)
+    #     raw_output = self.llm.generate(prompt)
+
+    #     try:
+    #         parsed = json.loads(raw_output)
+
+    #         # Structural checks (domain-level)
+    #         assert "in_scope" in parsed
+    #         assert isinstance(parsed["in_scope"], bool)
+
+    #         if not parsed["in_scope"]:
+    #             parsed["answer"] = []
+                
+    #         assert "answer" in parsed
+    #         assert "limitations" in parsed
+
+    #         return parsed  # ← plain dict
+
+    #     except Exception as e:
+    #         raise ValueError(
+    #             f"Invalid LLM output.\nRaw output:\n{raw_output}\nError: {e}"
+    #         )
+
     def synthesize(self, question, chunks):
         prompt = self.build_prompt(question, chunks)
         raw_output = self.llm.generate(prompt)
@@ -66,10 +90,9 @@ content:
             parsed = json.loads(raw_output)
 
             # Structural checks (domain-level)
-            assert "in_scope" in parsed
-            assert isinstance(parsed["in_scope"], bool)
+            assert "reason" in parsed
 
-            if not parsed["in_scope"]:
+            if parsed["reason"] == "out_of_scope":
                 parsed["answer"] = []
                 
             assert "answer" in parsed

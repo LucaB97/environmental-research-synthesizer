@@ -39,7 +39,9 @@ if ask_button and question.strip():
             st.error(f"API request failed: {e}")
             st.stop()
 
-    if not data.get("in_scope", False):
+    reason = data.get("reason", "none")
+
+    if reason == "out_of_scope":
         st.warning("⚠️ The question cannot be answered from the available sources.")
         if data.get("limitations"):
             st.markdown("**Reason:**")
@@ -47,11 +49,15 @@ if ask_button and question.strip():
                 st.write(f"- {lim}")
         st.stop()
 
+    elif reason == "insufficient_evidence":
+        st.warning("⚠️ The available evidence is limited. The answer below reflects only what is directly supported by the sources.")
+
+
     st.subheader("🧠 Synthesized Answer")
-    for bullet in data.get("answer", []):
-        st.markdown(f"- {bullet['text']}")
-        if bullet.get("citations"):
-            st.caption("Citations: " + ", ".join(bullet["citations"]))
+    for item in data.get("answer", []):
+        st.markdown(f"- {item['text']}")
+        if item.get("citations"):
+            st.caption("Citations: " + ", ".join(item["citations"]))
 
     if data.get("limitations"):
         st.subheader("⚠️ Limitations")
