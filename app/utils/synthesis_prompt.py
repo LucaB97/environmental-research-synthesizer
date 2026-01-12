@@ -12,7 +12,8 @@ STRICT RULES:
 EVIDENCE REQUIREMENTS:
 - EVERY factual claim MUST be supported by one or more citations
 - Citations MUST be attached at the sentence level
-- A sentence MAY cite multiple sources if the claim is supported by multiple studies
+- Each citation must be a chunk_id from the provided context (e.g. paper_12__chunk_46)
+- A sentence MAY cite multiple sources, if the claim is supported by multiple studies
 - If a claim cannot be supported, it MUST NOT be included
 
 OUTPUT FORMAT:
@@ -25,7 +26,7 @@ JSON SCHEMA:
   "answer": [
     {
       "text": "Single, evidence-based factual claim specifying the study context (e.g., country, region, population, policy setting, or study type).",
-      "citations": ["paper_id", "..."]
+      "citations": ["chunk_id", "..."]
     }
   ],
   "limitations": [

@@ -1,5 +1,3 @@
-from app.utils.citations import extract_citations
-
 def validate_reason(synthesis_output: dict) -> str:
     """
     Enforce backend invariants on the LLM-provided reason.
@@ -13,7 +11,11 @@ def validate_reason(synthesis_output: dict) -> str:
     if not answer:
         return "out_of_scope"
 
-    cited = extract_citations(answer)
+    cited = {
+        cid
+        for sentence in answer
+        for cid in sentence["citations"]
+    }
 
     # Rule 2: no citations -> insufficient evidence
     if not cited:

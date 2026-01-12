@@ -48,6 +48,7 @@ class ResearchSynthesisEngine:
         for c in chunks:
             sources_text += f"""
 SOURCE:
+chunk_id: {c['chunk_id']}
 paper_id: {c['paper_id']}
 authors: {c['authors']}
 year: {c['year']}

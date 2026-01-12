@@ -1,3 +1,6 @@
+from typing import Set, Dict, List
+
+
 def format_author_year(authors, year):
     """
     Format authors into a human-readable citation label.
@@ -18,68 +21,66 @@ def format_author_year(authors, year):
 
 
 
-def resolve_answer_citations(answer, paper_lookup):
+def resolve_answer_citations(answer, source_lookup):
     """
-    Replace paper_id citations with human-readable labels.
+    Replace chunk_id citations with human-readable labels.
     """
+
     resolved = []
 
     for sentence in answer:
-        readable_citations = []
+        labels = []
 
-        for pid in sentence["citations"]:
-            paper = paper_lookup.get(pid)
-            if not paper:
+        for sid in sentence["citations"]:
+            source = source_lookup.get(sid)
+            if not source:
                 continue
 
-            label = format_author_year(paper.get("authors"), paper.get("year"))
-            readable_citations.append(label)
+            label = format_author_year(
+                source.get("authors"),
+                source.get("year")
+            )
+            labels.append(label)
 
         resolved.append({
             "text": sentence["text"],
-            "citations": readable_citations
+            "citations": labels
         })
 
     return resolved
 
 
-def extract_citations(answer):
+
+def build_sources_from_used_chunks(
+    used_chunks: Set[str],
+    chunk_lookup: Dict[str, dict]
+) -> List[dict]:
     """
-    Extract unique citation strings from synthesized answer sentences.
+    Build a deduplicated list of source papers from cited chunk IDs.
 
     Args:
-        answer_sentences (list[dict]): Each dict contains 'text' and 'citations'
-
-    Returns:
-        set[str]: Unique citation identifiers (e.g. "Author et al., 2023")
-    """
-    citations = set()
-    for sentence in answer:
-        citations.update(sentence.get("citations", []))
-    return citations
-
-
-def build_sources_from_citations(chunks, cited_refs):
-    """
-    Build a deduplicated list of source papers that were actually cited.
-
-    Args:
-        chunks (list[dict]): Retrieved chunks
-        cited_refs (set[str]): Citation strings extracted from answer
+        used_chunks (set[str]): Chunk IDs cited in the answer
+        chunk_lookup (dict): Maps chunk_id -> chunk metadata
 
     Returns:
         list[dict]: Unique source papers supporting the answer
     """
     sources = {}
 
-    for c in chunks:
-        if c["paper_id"] in cited_refs:
-            sources[c["paper_id"]] = {
-                "paper_id": c["paper_id"],
-                "title": c["title"],
-                "authors": c["authors"],
-                "year": c["year"],
-                "journal": c.get("journal")
+    for cid in used_chunks:
+        chunk = chunk_lookup.get(cid)
+        if not chunk:
+            continue  # safety against invalid citations
+
+        pid = chunk["paper_id"]
+
+        if pid not in sources:
+            sources[pid] = {
+                "paper_id": pid,
+                "title": chunk["title"],
+                "authors": chunk["authors"],
+                "year": chunk["year"],
+                "journal": chunk.get("journal"),
             }
 
     return list(sources.values())
