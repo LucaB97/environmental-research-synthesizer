@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request, HTTPException
 from app.dependencies import load_system
 from app.schemas import QueryRequest, QueryResponse, Sentence
 from app.utils.citations import resolve_answer_citations, build_sources_from_used_chunks
-from app.utils.heuristics import validate_reason
+from app.utils.heuristics import determine_reason
 
 app = FastAPI(
     title="Environmental Research Synthesizer",
@@ -99,10 +99,10 @@ def query_endpoint(request: QueryRequest, req: Request):
     #
     
     ## Backend reason enforcement
-    synthesis_output["reason"] = validate_reason(synthesis_output)
+    synthesis_output["reason"] = determine_reason(synthesis_output, source_lookup)
 
     ## Get answer with citations in the [Authors, Year] format 
-    ## (the synthesizer originally uses paper_id to ensure correct and unique identification)
+    ## (the synthesizer originally uses chunk_id to ensure correct and unique identification)
     resolved_answer = resolve_answer_citations(
         synthesis_output["answer"],
         source_lookup

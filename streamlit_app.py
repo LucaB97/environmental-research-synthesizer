@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 
+from utils.inline_citations import render_sentence_with_inline_citations
+
 st.set_page_config(page_title="Environmental Research Synthesizer", layout="centered")
 
 # Status check
@@ -53,12 +55,16 @@ if ask_button and question.strip():
         st.warning("⚠️ The available evidence is limited. The answer below reflects only what is directly supported by the sources.")
 
 
+    # st.subheader("🧠 Synthesized Answer")
+    # for item in data.get("answer", []):
+    #     st.markdown(f"- {item['text']}")
+    #     if item.get("citations"):
+    #         st.caption("Citations: " + ", ".join(item["citations"]))
+
     st.subheader("🧠 Synthesized Answer")
     for item in data.get("answer", []):
-        st.markdown(f"- {item['text']}")
-        if item.get("citations"):
-            st.caption("Citations: " + ", ".join(item["citations"]))
-
+        st.markdown(render_sentence_with_inline_citations(item))
+    
     if data.get("limitations"):
         st.subheader("⚠️ Limitations")
         for lim in data["limitations"]:
