@@ -56,3 +56,6 @@ class QueryResponse(BaseModel):
     meta: Dict = Field(
         description="Additional metadata about retrieval and synthesis"
     )
+    debug: Dict = Field(
+        description="Debug info"
+    )

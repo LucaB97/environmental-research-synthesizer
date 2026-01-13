@@ -6,6 +6,7 @@ from app.dependencies import load_system
 from app.schemas import QueryRequest, QueryResponse, Sentence
 from app.utils.citations import resolve_answer_citations, build_sources_from_used_chunks
 from app.utils.heuristics import determine_reason
+from app.utils.debug_info import get_debug_info
 
 app = FastAPI(
     title="Environmental Research Synthesizer",
@@ -112,13 +113,15 @@ def query_endpoint(request: QueryRequest, req: Request):
     if synthesis_output["reason"] == "out_of_scope":
         sources = []
     else:
-        used_chunks = {
+        used_chunks_ids = {
             cid
             for sentence in synthesis_output["answer"]
             for cid in sentence["citations"]
         }
-        sources = build_sources_from_used_chunks(used_chunks, source_lookup)
+        sources = build_sources_from_used_chunks(used_chunks_ids, source_lookup)
 
+    ## Add debug info for retrieved vs used chunks debug panel in UI
+    debug = get_debug_info(retrieved_chunks, used_chunks_ids)
 
     return QueryResponse(
         question=request.question,
@@ -131,6 +134,7 @@ def query_endpoint(request: QueryRequest, req: Request):
             "retrieval_time_sec": round(retrieval_time, 3),
             "synthesis_time_sec": round(synthesis_time, 3),
             "total_time_sec": round(total_time, 3),
-        }
+        },
+        debug=debug
     )
 
