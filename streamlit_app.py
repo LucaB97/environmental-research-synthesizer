@@ -213,3 +213,5 @@ if show_debug and "debug" in data:
 
     with col3:
         st.metric("Paper dominance", metrics["paper_dominance"])
+        st.metric("Avg citations per sentence", metrics["avg_citations_per_sentence"])
+        st.metric("Multi-source sentence ratio", metrics["multi_source_sentence_ratio"])

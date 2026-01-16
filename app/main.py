@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request, HTTPException
 
 from app.dependencies import load_system
 from app.schemas import QueryRequest, QueryResponse, Sentence
-from app.utils.citations import remove_citations_inside_text, resolve_answer_citations, build_sources_from_used_chunks
+from app.utils.citations import remove_citations_inside_text, resolve_answer_citations, build_source_entry
 from app.utils.heuristics import determine_reason
 from app.utils.debug_info import get_debug_info
 
@@ -106,31 +106,29 @@ def query_endpoint(request: QueryRequest, req: Request):
     synthesis_output["reason"] = determine_reason(synthesis_output, source_lookup)
 
     ## Get answer with citations in the [Authors, Year] format 
-    ## (the synthesizer originally uses chunk_id to ensure correct and unique identification)
-    resolved_answer = resolve_answer_citations(
+    resolved_answer, sentence_citations = resolve_answer_citations(
         synthesis_output["answer"],
         source_lookup
     )
 
     ## Remove any references included in the synthesis text
     resolved_answer = remove_citations_inside_text(resolved_answer)
-    
-    
+
+    ## Build list of sources
+    if synthesis_output["reason"] == "out_of_scope":
+        sources = []
+    else:
+        cited_paper_ids = set().union(*sentence_citations)
+        sources = [build_source_entry(pid, source_lookup) for pid in cited_paper_ids]
+
+    ## Add debug info for UI
     used_chunks_ids = {
         cid
         for sentence in synthesis_output["answer"]
         for cid in sentence.get("citations", [])
     }
+    debug = get_debug_info(retrieved_chunks, used_chunks_ids, sentence_citations)
 
-    ## Build list of sources
-    if synthesis_output["reason"] == "out_of_scope":
-        sources = []
-        used_chunks_ids = set()
-    else:
-        sources = build_sources_from_used_chunks(used_chunks_ids, source_lookup)
-
-    ## Add debug info for UI
-    debug = get_debug_info(retrieved_chunks, used_chunks_ids)
 
     return QueryResponse(
         question=request.question,

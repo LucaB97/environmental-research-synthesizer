@@ -59,49 +59,47 @@ content:
         prompt = self.prompt_template.replace("{{SOURCES}}", sources_text).replace("{{QUESTION}}", question)
         return prompt
 
-    # def synthesize(self, question, chunks):
-    #     prompt = self.build_prompt(question, chunks)
-    #     raw_output = self.llm.generate(prompt)
 
-    #     try:
-    #         parsed = json.loads(raw_output)
-
-    #         # Structural checks (domain-level)
-    #         assert "in_scope" in parsed
-    #         assert isinstance(parsed["in_scope"], bool)
-
-    #         if not parsed["in_scope"]:
-    #             parsed["answer"] = []
-                
-    #         assert "answer" in parsed
-    #         assert "limitations" in parsed
-
-    #         return parsed  # ← plain dict
-
-    #     except Exception as e:
-    #         raise ValueError(
-    #             f"Invalid LLM output.\nRaw output:\n{raw_output}\nError: {e}"
-    #         )
 
     def synthesize(self, question, chunks):
         prompt = self.build_prompt(question, chunks)
         raw_output = self.llm.generate(prompt)
 
+        # Truncation heuristics
+        if raw_output.count("{") != raw_output.count("}"):
+            raise ValueError(
+                "LLM output appears truncated.\n"
+                f"Raw output:\n{raw_output}"
+            )
+        
+        # JSON parsing
         try:
             parsed = json.loads(raw_output)
-
-            # Structural checks (domain-level)
-            assert "reason" in parsed
-
-            if parsed["reason"] == "out_of_scope":
-                parsed["answer"] = []
-                
-            assert "answer" in parsed
-            assert "limitations" in parsed
-
-            return parsed  # ← plain dict
-
-        except Exception as e:
+        except json.JSONDecodeError as e:
             raise ValueError(
-                f"Invalid LLM output.\nRaw output:\n{raw_output}\nError: {e}"
+                "LLM returned malformed JSON.\n"
+                f"Raw output:\n{raw_output}\n"
+                f"JSON error: {e}"
             )
+
+        # Structural checks (domain-level)
+        if "reason" not in parsed:
+            raise ValueError(f"Missing 'reason' field.\nOutput: {parsed}")
+
+        if parsed["reason"] == "out_of_scope":
+            parsed["answer"] = []
+
+        if "answer" not in parsed or not isinstance(parsed["answer"], list):
+            raise ValueError(f"Invalid or missing 'answer'.\nOutput: {parsed}")
+
+        if "limitations" not in parsed or not isinstance(parsed["limitations"], list):
+            raise ValueError(f"Invalid or missing 'limitations'.\nOutput: {parsed}")
+
+        # Sentence-level checks
+        for i, s in enumerate(parsed["answer"]):
+            if "text" not in s or "citations" not in s:
+                raise ValueError(
+                    f"Malformed answer item at index {i}.\nItem: {s}"
+                )
+
+        return parsed
