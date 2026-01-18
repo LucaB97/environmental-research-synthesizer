@@ -62,14 +62,40 @@ if ask_button:
             try:
                 response = requests.post(
                     API_URL,
-                    json={"question": question,
-                          "top_k": top_k},
+                    json={
+                        "question": question,
+                        "top_k": top_k
+                    },
                     timeout=60,
                 )
-                response.raise_for_status()
-                st.session_state["data"] = response.json()
+            except requests.exceptions.Timeout:
+                st.error(
+                    "⏳ The request timed out. The system may be under heavy load. "
+                    "Please try again."
+                )
+                st.stop()
             except requests.exceptions.RequestException as e:
-                st.error(f"API request failed: {e}")
+                st.error(
+                    "🚫 Unable to contact the backend service. "
+                    "Please check that it is running."
+                )
+                st.stop()
+
+            # ---- HTTP-level failure (true backend error) ----
+            if response.status_code != 200:
+                st.error(
+                    "🚫 The backend service encountered an error. "
+                    "Please try again later."
+                )
+                st.stop()
+
+            # ---- Success: parse JSON ----
+            try:
+                st.session_state["data"] = response.json()
+            except ValueError:
+                st.error(
+                    "🚫 Received an invalid response from the backend."
+                )
                 st.stop()
 
 # ---------------------------------------------------------------------
@@ -84,7 +110,14 @@ if not data:
 # ---------------------------------------------------------------------
 reason = data.get("reason", "none")
 
-if reason == "out_of_scope":
+if reason == "generation_failed":
+    st.warning("⚠️ Unable to generate a reliable answer.")
+    st.markdown(
+        "The system could not generate a stable synthesis from the available evidence."
+    )
+    st.stop()
+
+elif reason == "out_of_scope":
     st.warning("⚠️ The question cannot be answered from the available sources.")
     if data.get("limitations"):
         st.markdown("**Reason:**")

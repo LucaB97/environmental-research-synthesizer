@@ -4,9 +4,11 @@ from fastapi import FastAPI, Request, HTTPException
 
 from app.dependencies import load_system
 from app.schemas import QueryRequest, QueryResponse, Sentence
+from app.utils.synthesis_prompt import BASIC_SYNTHESIS_PROMPT, RETRY_SYNTHESIS_PROMPT
 from app.utils.citations import remove_citations_inside_text, resolve_answer_citations, build_source_entry
 from app.utils.heuristics import determine_reason
-from app.utils.debug_info import get_debug_info
+from app.utils.evidence_analysis import aggregate_evidence, compute_evidence_metrics, get_debug_info
+
 
 app = FastAPI(
     title="Environmental Research Synthesizer",
@@ -40,6 +42,7 @@ def health_check(req: Request):
 @app.post("/query", response_model=QueryResponse)
 def query_endpoint(request: QueryRequest, req: Request):
     
+    logger = logging.getLogger(__name__)
     start_time = time.perf_counter()
     retriever = req.app.state.retriever
     synthesizer = req.app.state.synthesizer
@@ -82,18 +85,19 @@ def query_endpoint(request: QueryRequest, req: Request):
     try:
         synthesis_output = synthesizer.synthesize(
             request.question,
-            retrieved_chunks
+            retrieved_chunks,
+            BASIC_SYNTHESIS_PROMPT
         )
     except ValueError as e:
-        logger = logging.getLogger(__name__)
-        logger.error(
-            "Synthesis failed due to invalid LLM output",
-            exc_info=e
+        logger.error("Synthesis failed after retries", exc_info=e)
+        return QueryResponse(
+            question=request.question,
+            reason="generation_failed",
+            answer=[],
+            limitations=[],
+            sources=[]
         )
-        raise HTTPException(
-            status_code=502,
-            detail="LLM returned invalid structured output"
-        )
+
     
     synthesis_time = time.perf_counter() - t1
     total_time = time.perf_counter() - start_time
@@ -105,11 +109,22 @@ def query_endpoint(request: QueryRequest, req: Request):
     ## Backend reason enforcement
     synthesis_output["reason"] = determine_reason(synthesis_output, source_lookup)
 
+
     ## Get answer with citations in the [Authors, Year] format 
     resolved_answer, sentence_citations = resolve_answer_citations(
         synthesis_output["answer"],
         source_lookup
     )
+
+    ## Compute evidence metrics
+    used_chunks_ids = {
+        cid
+        for sentence in synthesis_output["answer"]
+        for cid in sentence.get("citations", [])
+    }
+
+    aggregation = aggregate_evidence(retrieved_chunks, used_chunks_ids)
+    metrics = compute_evidence_metrics(aggregation, sentence_citations)
 
     ## Remove any references included in the synthesis text
     resolved_answer = remove_citations_inside_text(resolved_answer)
@@ -122,12 +137,7 @@ def query_endpoint(request: QueryRequest, req: Request):
         sources = [build_source_entry(pid, source_lookup) for pid in cited_paper_ids]
 
     ## Add debug info for UI
-    used_chunks_ids = {
-        cid
-        for sentence in synthesis_output["answer"]
-        for cid in sentence.get("citations", [])
-    }
-    debug = get_debug_info(retrieved_chunks, used_chunks_ids, sentence_citations)
+    debug = get_debug_info(aggregation, metrics)
 
 
     return QueryResponse(

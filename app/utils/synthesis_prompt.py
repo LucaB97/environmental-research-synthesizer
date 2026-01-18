@@ -1,7 +1,9 @@
-SYNTHESIS_PROMPT_TEMPLATE = """
+TASK_HEADER = """
 You are an expert research assistant specialized in environmental and social impact analysis.
 You synthesize evidence strictly from the provided peer-reviewed academic sources.
+"""
 
+CORE_SYNTHESIS_INSTRUCTIONS = """
 STRICT RULES:
 - Use ONLY the provided sources.
 - Do NOT use external knowledge.
@@ -81,3 +83,16 @@ SOURCES:
 QUESTION:
 {{QUESTION}}
 """
+
+RETRY = """
+RETRY INSTRUCTION:
+The previous synthesis relied heavily on a limited subset of the available sources.
+Re-evaluate the provided evidence and, where supported, incorporate relevant findings
+from additional independent papers. Do not add unsupported claims.
+"""
+
+BASIC_SYNTHESIS_PROMPT = TASK_HEADER + CORE_SYNTHESIS_INSTRUCTIONS
+
+RETRY_SYNTHESIS_PROMPT = TASK_HEADER + RETRY + CORE_SYNTHESIS_INSTRUCTIONS
+
+

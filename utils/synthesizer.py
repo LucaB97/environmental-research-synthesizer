@@ -37,13 +37,14 @@ class ResearchSynthesisEngine:
         "limitations": list
     }
     """
-    def __init__(self, llm_client, prompt_template):
+    def __init__(self, llm_client, max_attempts=3):
         if not hasattr(llm_client, "generate"):
             raise ValueError("llm_client must implement a .generate(prompt) method")
         self.llm = llm_client
-        self.prompt_template = prompt_template
+        self.max_attempts = max_attempts
 
-    def build_prompt(self, question, chunks):
+
+    def build_prompt(self, question, chunks, prompt_template):
         sources_text = ""
         for c in chunks:
             sources_text += f"""
@@ -56,50 +57,64 @@ title: {c['title']}
 content:
 {c['text']}
 """
-        prompt = self.prompt_template.replace("{{SOURCES}}", sources_text).replace("{{QUESTION}}", question)
+        prompt = prompt_template.replace("{{SOURCES}}", sources_text).replace("{{QUESTION}}", question)
         return prompt
 
 
 
-    def synthesize(self, question, chunks):
-        prompt = self.build_prompt(question, chunks)
-        raw_output = self.llm.generate(prompt)
+    def synthesize(self, question, chunks, prompt_template):
+        prompt = self.build_prompt(question, chunks, prompt_template)
 
-        # Truncation heuristics
-        if raw_output.count("{") != raw_output.count("}"):
-            raise ValueError(
-                "LLM output appears truncated.\n"
-                f"Raw output:\n{raw_output}"
-            )
-        
-        # JSON parsing
-        try:
-            parsed = json.loads(raw_output)
-        except json.JSONDecodeError as e:
-            raise ValueError(
-                "LLM returned malformed JSON.\n"
-                f"Raw output:\n{raw_output}\n"
-                f"JSON error: {e}"
-            )
+        last_error = None
 
-        # Structural checks (domain-level)
-        if "reason" not in parsed:
-            raise ValueError(f"Missing 'reason' field.\nOutput: {parsed}")
+        for attempt in range(1, self.max_attempts + 1):
+            
+            if attempt > 1:
+                prompt = prompt + "\n\nREMINDER: Return ONLY valid JSON."
+            
+            raw_output = self.llm.generate(prompt)
 
-        if parsed["reason"] == "out_of_scope":
-            parsed["answer"] = []
+            try:
+                # --- Truncation heuristics ---
+                if raw_output.count("{") != raw_output.count("}"):
+                    raise ValueError(
+                        "LLM output appears truncated."
+                    )
 
-        if "answer" not in parsed or not isinstance(parsed["answer"], list):
-            raise ValueError(f"Invalid or missing 'answer'.\nOutput: {parsed}")
+                # --- JSON parsing ---
+                parsed = json.loads(raw_output)
 
-        if "limitations" not in parsed or not isinstance(parsed["limitations"], list):
-            raise ValueError(f"Invalid or missing 'limitations'.\nOutput: {parsed}")
+                # --- Structural checks ---
+                if "reason" not in parsed:
+                    raise ValueError("Missing 'reason' field.")
 
-        # Sentence-level checks
-        for i, s in enumerate(parsed["answer"]):
-            if "text" not in s or "citations" not in s:
-                raise ValueError(
-                    f"Malformed answer item at index {i}.\nItem: {s}"
-                )
+                if parsed["reason"] == "out_of_scope":
+                    parsed["answer"] = []
 
-        return parsed
+                if "answer" not in parsed or not isinstance(parsed["answer"], list):
+                    raise ValueError("Invalid or missing 'answer'.")
+
+                if "limitations" not in parsed or not isinstance(parsed["limitations"], list):
+                    raise ValueError("Invalid or missing 'limitations'.")
+
+                for i, s in enumerate(parsed["answer"]):
+                    if "text" not in s or "citations" not in s:
+                        raise ValueError(
+                            f"Malformed answer item at index {i}."
+                        )
+
+                # ✅ Success
+                return parsed
+
+            except Exception as e:
+                last_error = e
+                # Optional: log attempt-level failure
+                # logger.warning(f"Synthesis attempt {attempt} failed: {e}")
+
+        # ❌ All attempts failed
+        raise ValueError(
+            "LLM failed to produce valid structured output "
+            f"after {self.max_attempts} attempts.\n"
+            f"Last error: {last_error}"
+        )
+

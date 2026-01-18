@@ -23,3 +23,6 @@ def determine_reason(synthesis_output, chunk_lookup):
         return "insufficient_evidence"
 
     return "none"
+
+
+#def should_retry()

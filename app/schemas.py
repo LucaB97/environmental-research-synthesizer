@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Literal
 
 
 class QueryRequest(BaseModel):
@@ -41,9 +41,12 @@ class Source(BaseModel):
 
 class QueryResponse(BaseModel):
     question: str = Field(description="Original research question")
-    reason: str = Field(
-        description="Explains why the system’s answer may be incomplete or absent: none | out_of_scope | insufficient_evidence"
-    )
+    reason: Literal[
+        "none",
+        "out_of_scope",
+        "insufficient_evidence",
+        "generation_failed"
+    ]
     answer: List[Sentence] = Field(
         description="Structured synthesis of the retrieved evidence"
     )
@@ -54,8 +57,10 @@ class QueryResponse(BaseModel):
         description="Academic sources that support the synthesized answer"
     )
     meta: Dict = Field(
+        default_factory=dict,
         description="Additional metadata about retrieval and synthesis"
     )
     debug: Dict = Field(
+        default_factory=dict,
         description="Debug info"
     )

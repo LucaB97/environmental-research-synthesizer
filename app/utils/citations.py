@@ -2,7 +2,9 @@ from typing import Set, Dict, List
 import re
 
 
-CITATION_PATTERN = re.compile(r"\([^)]*\d{4}[^)]*\)")
+CHUNK_ID_PATTERN = re.compile(
+    r"\(paper_\d+__chunk_\d+\)"
+)
 
 def remove_citations_inside_text(answer):
     """
@@ -12,10 +14,11 @@ def remove_citations_inside_text(answer):
 
     for sentence in answer:
         text = sentence['text']
-        text_no_citations = CITATION_PATTERN.sub("", text).strip()
+        text_no_citations = CHUNK_ID_PATTERN.sub("", text).strip()
+        text_no_spaces_before_punctuation = re.sub(r"\s+([.,])", r"\1", text_no_citations)
 
         cleaned.append({
-            "text": text_no_citations,
+            "text": text_no_spaces_before_punctuation,
             "citations": sentence['citations']
         })
 
