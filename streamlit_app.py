@@ -136,10 +136,9 @@ elif reason == "insufficient_evidence":
 # ---------------------------------------------------------------------
 # st.subheader("🧠 Synthesized Answer")
 
-st.markdown("### Synthesized Answer")
-
 label = data["confidence"]["label"]
 score = data["confidence"]["score"]
+explanation = data["confidence"]["explanation"]
 
 if label == "High":
     st.success(f"Confidence: {label}")
@@ -153,10 +152,11 @@ st.caption(
 )
 
 with st.expander("Why this confidence level?"):
-    st.markdown(
-        "- Evidence comes from a limited number of papers\n"
-        "- Few claims are corroborated by multiple sources"
-    )
+    for item in explanation:
+        st.markdown(f"- {item}")
+
+st.subheader("🧠 Synthesized Answer")
+st.markdown("### Synthesized Answer")
 
 for item in data.get("answer", []):
     st.markdown(render_sentence_with_inline_citations(item))

@@ -48,6 +48,10 @@ class Confidence(BaseModel):
     label: Literal["High", "Medium", "Low"] = Field(
         description="Human-readable confidence level"
     )
+    explanation: List[str] = Field(
+        ...,
+        description="One or more coincise messages to explain the displayed confidence level"
+    )
 
 
 class QueryResponse(BaseModel):

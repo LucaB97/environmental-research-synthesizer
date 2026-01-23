@@ -131,11 +131,12 @@ def query_endpoint(request: QueryRequest, req: Request):
         aggregation = aggregate_evidence(retrieved_chunks, used_chunks_ids)
         metrics = compute_evidence_metrics(aggregation, sentence_papers)
 
-        score, label = compute_confidence(metrics, synthesis_output["reason"])
+        score, label, explanation = compute_confidence(metrics, synthesis_output["reason"])
         
         if score > best_score:
             best_score = score
             best_label = label
+            best_explanation = explanation
             best_output = synthesis_output
             best_sentence_papers = sentence_papers
             best_aggregation = aggregation
@@ -183,7 +184,7 @@ def query_endpoint(request: QueryRequest, req: Request):
         cited_paper_ids = set().union(*best_sentence_papers)
         sources = [build_source_entry(pid, source_lookup) for pid in cited_paper_ids]
         debug = get_debug_info(best_aggregation)
-        confidence = Confidence(score=best_score, label=best_label)
+        confidence = Confidence(score=best_score, label=best_label, explanation=best_explanation)
 
 
     return QueryResponse(

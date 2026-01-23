@@ -27,7 +27,7 @@ def determine_reason(synthesis_output, chunk_lookup):
         if cid in chunk_lookup
     }
 
-    if len(cited_papers) < 2:
+    if len(cited_papers) < 3:
         return "insufficient_evidence"
 
     return "none"
