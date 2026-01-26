@@ -9,17 +9,20 @@ def determine_reason(synthesis_output, chunk_lookup):
     """
     answer = synthesis_output.get("answer", [])
 
+    # insufficient evidence if the answer is empty or there is some sentence without citations
     if not answer:
-        return "out_of_scope"
+        return "insufficient_evidence"
 
+    if any(not s.get("citations") for s in answer):
+        return "insufficient_evidence"
+
+
+    # insufficient evidence if less than three distinct papers are cited
     cited_chunks = {
         cid
         for sentence in answer
         for cid in sentence.get("citations", [])
     }
-
-    if not cited_chunks:
-        return "insufficient_evidence"
 
     cited_papers = {
         chunk_lookup[cid]["paper_id"]
@@ -29,6 +32,7 @@ def determine_reason(synthesis_output, chunk_lookup):
 
     if len(cited_papers) < 3:
         return "insufficient_evidence"
+
 
     return "none"
 

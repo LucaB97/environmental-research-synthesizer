@@ -4,14 +4,6 @@ def compute_confidence(metrics, reason):
     and short explanations based on evidence strength.
     """
 
-    # Hard failure
-    if reason == "out_of_scope":
-        return (
-            0.0,
-            "Low",
-            ["The question falls outside the scope of the available evidence."]
-        )
-
     # --- Score ---
     paper_coverage = metrics.get("paper_coverage", 0.0)
     paper_dominance = metrics.get("paper_dominance", 1.0)

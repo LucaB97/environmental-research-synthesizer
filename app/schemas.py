@@ -60,7 +60,8 @@ class QueryResponse(BaseModel):
         "none",
         "out_of_scope",
         "insufficient_evidence",
-        "generation_failed"
+        "generation_failed",
+        "retrieval_failed"
     ]
     answer: List[Sentence] = Field(
         description="Structured synthesis of the retrieved evidence"

@@ -53,7 +53,6 @@ Do NOT include explanations, markdown, or additional text.
 
 JSON SCHEMA:
 {
-  "reason": "none" | "out_of_scope" | "insufficient_evidence",
   "answer": [
     {
       "text": "Single, evidence-based factual claim.",
@@ -66,11 +65,9 @@ JSON SCHEMA:
 }
 
 FAILURE CONDITIONS:
-- If the provided sources do NOT address the question at all:
-  - Return an empty "answer" list.
-  - Explain the mismatch in "limitations".
-- If the sources address the question only partially or weakly:
-  - Include ONLY claims that are directly supported by the sources.
+- If the provided sources do NOT clearly support any claims relevant to the question:
+  - You MAY return an empty "answer" list.
+  - Explain uncertainty or mismatch in "limitations".
 
 ADDITIONAL INSTRUCTIONS:
 - Sentences should be concise and atomic (one claim per sentence).

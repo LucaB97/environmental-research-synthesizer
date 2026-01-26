@@ -1,8 +1,8 @@
 import streamlit as st
 import requests
 
-from utils.inline_citations import render_sentence_with_inline_citations
-from utils.export import response_to_json, response_to_markdown
+from app.utils.inline_citations import render_sentence_with_inline_citations
+from app.utils.export import response_to_json, response_to_markdown
 # ---------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------
@@ -117,6 +117,7 @@ if reason == "generation_failed":
     )
     st.stop()
 
+
 elif reason == "out_of_scope":
     st.warning("⚠️ The question cannot be answered from the available sources.")
     if data.get("limitations"):
@@ -125,11 +126,30 @@ elif reason == "out_of_scope":
             st.write(f"{lim}")
     st.stop()
 
+
 elif reason == "insufficient_evidence":
     st.warning(
         "⚠️ The available evidence is limited. "
         "The answer below reflects only what is directly supported by the sources."
     )
+
+    # Case 1: partial answer → explain and continue
+    if data.get("answer", []):
+        st.caption(
+            "The answer below reflects only what is directly supported by the sources."
+        )
+    
+    # Case 2: no answer at all → explain and stop
+    else:
+        limitations = data.get("limitations", [])
+        if limitations:
+            for lim in limitations:
+                st.markdown(f"{lim}")
+        else:
+            st.info(
+                "No meaningful answer could be produced from the available literature."
+            )       
+
 
 # ---------------------------------------------------------------------
 # Synthesized answer (inline citations)

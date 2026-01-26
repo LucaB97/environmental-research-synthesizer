@@ -36,6 +36,7 @@ def health_check(req: Request):
         ),
         "index_size": retriever.index.ntotal if retriever else None,
         "synthesizer_loaded": hasattr(req.app.state, "synthesizer"),
+        "relevance_gate_loaded": hasattr(req.app.state, "relevance_gate"),
     }
 
 
@@ -46,6 +47,7 @@ def query_endpoint(request: QueryRequest, req: Request):
     start_time = time.perf_counter()
     retriever = req.app.state.retriever
     synthesizer = req.app.state.synthesizer
+    relevance_gate = req.app.state.relevance_gate
 
     #
     # --- Retrieval ---
@@ -62,9 +64,11 @@ def query_endpoint(request: QueryRequest, req: Request):
     if not retrieved_chunks:
         return QueryResponse(
             question=request.question,
-            in_scope=False,
+            reason="retrieval_failed",
             answer=[],
-            limitations=["No relevant sources were retrieved for this question."],
+            limitations=[
+                "The system was unable to retrieve information to be used for synthesis."
+            ],
             sources=[],
             meta={
                 "top_k": request.top_k,
@@ -72,28 +76,46 @@ def query_endpoint(request: QueryRequest, req: Request):
                 },
         )
 
-    source_lookup = {
-        c["chunk_id"]: c
-        for c in retrieved_chunks
-    }
+
+    relevant = relevance_gate.is_relevant(request.question, retrieved_chunks)
+
+    if not relevant:
+        # rationale = None
+        # if explain:
+        #     rationale = llm_explain_irrelevance(question, retrieved_chunks)
+
+        return QueryResponse(
+            question=request.question,
+            reason="out_of_scope",
+            answer=[],
+            limitations=["The available literature does not address the question."],
+            sources=[],
+            meta={
+                "relevance_gate": {
+                    "method": "cross_encoder",
+                    "passed": False
+                    # "rationale": rationale
+                }
+            }
+        )
 
 
     #
     # --- Synthesis ---
     #    
-    
+
+    source_lookup = {
+        c["chunk_id"]: c
+        for c in retrieved_chunks
+    }
+
     max_attempts = 2
     attempt = 0
     best_output, best_score = None, -1
-    
-    sources = []
-    best_metrics = None
-    debug = {}
-    confidence = None
-    
-    prompt = BASIC_SYNTHESIS_PROMPT
     last_error = None
-    
+
+    prompt = BASIC_SYNTHESIS_PROMPT
+
     t1 = time.perf_counter()
 
     while attempt < max_attempts:
@@ -109,15 +131,28 @@ def query_endpoint(request: QueryRequest, req: Request):
             last_error = e
             logger.error("Synthesis failed after retries", exc_info=e)
             break  # hard failure → exit loop
+
+
+        answer = synthesis_output["answer"]
         
-
-        ## Backend reason enforcement
-        synthesis_output["reason"] = determine_reason(synthesis_output, source_lookup)
-
-        if synthesis_output["reason"] == "out_of_scope":
-            best_output = synthesis_output
-            break
-
+        if not answer:
+            limitations = synthesis_output.get("limitations") or [
+                "No meaningful answer could be produced from the available literature."
+                ]
+            
+            return QueryResponse(
+                question=request.question,
+                reason="insufficient_evidence",
+                answer=[],
+                limitations=limitations,
+                sources=[],
+                evidence_metrics=None,
+                confidence={
+                    "score": 0.0,
+                    "label": "Low",
+                    "explanation": ""
+                }
+            )
 
         ## Evidence metrics
         sentence_papers = extract_sentence_paper_ids(synthesis_output["answer"], source_lookup)
@@ -131,7 +166,8 @@ def query_endpoint(request: QueryRequest, req: Request):
         aggregation = aggregate_evidence(retrieved_chunks, used_chunks_ids)
         metrics = compute_evidence_metrics(aggregation, sentence_papers)
 
-        score, label, explanation = compute_confidence(metrics, synthesis_output["reason"])
+        failure_reason = determine_reason(synthesis_output, source_lookup)
+        score, label, explanation = compute_confidence(metrics, failure_reason)
         
         if score > best_score:
             best_score = score
@@ -143,7 +179,7 @@ def query_endpoint(request: QueryRequest, req: Request):
             best_metrics = metrics
 
         # --- Retry decision ---
-        if should_retry(metrics) and attempt < max_attempts:
+        if metrics and should_retry(metrics) and attempt < max_attempts:
             logger.info(
                 "Retrying synthesis due to weak evidence metrics",
                 extra={"metrics": metrics}
@@ -180,11 +216,10 @@ def query_endpoint(request: QueryRequest, req: Request):
     resolved_answer = remove_citations_inside_text(resolved_answer)
 
     ## Build list of sources
-    if best_output["reason"] != "out_of_scope":
-        cited_paper_ids = set().union(*best_sentence_papers)
-        sources = [build_source_entry(pid, source_lookup) for pid in cited_paper_ids]
-        debug = get_debug_info(best_aggregation)
-        confidence = Confidence(score=best_score, label=best_label, explanation=best_explanation)
+    cited_paper_ids = set().union(*best_sentence_papers)
+    sources = [build_source_entry(pid, source_lookup) for pid in cited_paper_ids]
+    debug = get_debug_info(best_aggregation)
+    confidence = Confidence(score=best_score, label=best_label, explanation=best_explanation)
 
 
     return QueryResponse(

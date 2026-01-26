@@ -13,7 +13,7 @@ from utils.chunking import create_chunks
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PAPERS_DIR = PROJECT_ROOT / "data" / "papers"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "chunks.json"
-METADATA_PATH = PROJECT_ROOT / "metadata.csv"
+METADATA_PATH = PROJECT_ROOT / "data" / "metadata.csv"
 
 metadata = pd.read_csv(METADATA_PATH)
 chunks = []
