@@ -81,14 +81,41 @@ QUESTION:
 {{QUESTION}}
 """
 
-RETRY = """
+RETRY_SOURCE_DIVERSITY = """
 RETRY INSTRUCTION:
 The previous synthesis relied heavily on a limited subset of the available sources.
-Re-evaluate the provided evidence and, where supported, incorporate relevant findings from additional independent papers. Do not add unsupported claims.
+Re-evaluate the provided evidence and, where supported, incorporate relevant findings from additional independent papers.
+Do not add unsupported claims.
 """
 
-BASIC_SYNTHESIS_PROMPT = TASK_HEADER + CORE_SYNTHESIS_INSTRUCTIONS
+RETRY_CORROBORATION = """
+RETRY INSTRUCTION:
+Some claims in the previous synthesis were supported by only a single source.
+Where possible, prioritize findings that are corroborated by multiple independent papers.
+If a claim cannot be corroborated, either qualify it or omit it.
+Do not introduce new claims without evidence.
+"""
 
-RETRY_SYNTHESIS_PROMPT = TASK_HEADER + RETRY + CORE_SYNTHESIS_INSTRUCTIONS
+RETRY_EVIDENCE_UTILIZATION = """
+RETRY INSTRUCTION:
+Several relevant evidence excerpts were not used in the previous synthesis.
+Review the provided sources and ensure that all relevant and non-redundant evidence is considered where appropriate.
+Do not repeat the same findings across sentences.
+"""
+
+RETRY_PROMPTS = {
+    "source_diversity": RETRY_SOURCE_DIVERSITY,
+    "corroboration": RETRY_CORROBORATION,
+    "evidence_utilization": RETRY_EVIDENCE_UTILIZATION,
+}
 
 
+# RETRY = """
+# RETRY INSTRUCTION:
+# The previous synthesis relied heavily on a limited subset of the available sources.
+# Re-evaluate the provided evidence and, where supported, incorporate relevant findings from additional independent papers. Do not add unsupported claims.
+# """
+
+# BASIC_SYNTHESIS_PROMPT = TASK_HEADER + CORE_SYNTHESIS_INSTRUCTIONS
+
+# RETRY_SYNTHESIS_PROMPT = TASK_HEADER + RETRY + CORE_SYNTHESIS_INSTRUCTIONS

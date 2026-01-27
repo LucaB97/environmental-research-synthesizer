@@ -22,7 +22,7 @@ def compute_confidence(metrics, reason):
     # --- Label ---
     if score >= 0.75:
         label = "High"
-    elif score >= 0.45:
+    elif score >= 0.40:
         label = "Medium"
     else:
         label = "Low"
@@ -40,9 +40,13 @@ def compute_confidence(metrics, reason):
             "The synthesis relies heavily on a single paper."
         )
 
-    if multi_source_ratio < 0.3:
+    if multi_source_ratio == 0:
         signals.append(
-            "Most sentences are supported by a single source rather than multiple independent sources."
+            "None of the claims are supported by multiple independent sources."
+        )
+    elif multi_source_ratio < 0.3:
+        signals.append(
+            "Only a small fraction of claims are supported by multiple independent sources."
         )
 
     if label == "High":
@@ -50,6 +54,6 @@ def compute_confidence(metrics, reason):
             "The answer is supported by multiple independent sources with good coverage."
         ]
     else:
-        explanation = signals[:2]  # safe even if <2
+        explanation = signals[:3]  # safe even if <2
 
     return score, label, explanation

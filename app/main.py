@@ -4,9 +4,9 @@ from fastapi import FastAPI, Request
 
 from app.dependencies import load_system
 from app.schemas import QueryRequest, QueryResponse, Sentence, Confidence
-from app.utils.synthesis_prompt import BASIC_SYNTHESIS_PROMPT, RETRY_SYNTHESIS_PROMPT
+from app.utils.synthesis_prompt import TASK_HEADER, CORE_SYNTHESIS_INSTRUCTIONS, RETRY_PROMPTS
 from app.utils.citations import remove_citations_inside_text, resolve_answer_citations, build_source_entry
-from app.utils.heuristics import determine_reason, should_retry
+from app.utils.heuristics import determine_reason, determine_retry_reason
 from app.utils.evidence_analysis import aggregate_evidence, extract_sentence_paper_ids, compute_evidence_metrics, get_debug_info
 from app.utils.confidence import compute_confidence
 
@@ -109,13 +109,14 @@ def query_endpoint(request: QueryRequest, req: Request):
         for c in retrieved_chunks
     }
 
-    max_attempts = 2
+    max_attempts = 3
     attempt = 0
     synthesis_output = None
     best_output, best_score = None, -1
     last_error = None
+    retry_triggers = set()
 
-    prompt = BASIC_SYNTHESIS_PROMPT
+    prompt = TASK_HEADER + CORE_SYNTHESIS_INSTRUCTIONS
 
     t1 = time.perf_counter()
 
@@ -151,7 +152,7 @@ def query_endpoint(request: QueryRequest, req: Request):
                 confidence={
                     "score": 0.0,
                     "label": "Low",
-                    "explanation": ""
+                    "explanation": []
                 }
             )
 
@@ -181,12 +182,17 @@ def query_endpoint(request: QueryRequest, req: Request):
             best_explanation = explanation
 
         # --- Retry decision ---
-        if metrics and should_retry(metrics) and attempt < max_attempts:
+        retry_reason = determine_retry_reason(metrics)
+        
+        if retry_reason:
+            retry_triggers.add(retry_reason)  
+
+        if metrics and retry_reason and attempt < max_attempts:
             logger.info(
                 "Retrying synthesis due to weak evidence metrics",
                 extra={"metrics": metrics}
             )
-            prompt = RETRY_SYNTHESIS_PROMPT
+            prompt = TASK_HEADER + RETRY_PROMPTS[retry_reason] + CORE_SYNTHESIS_INSTRUCTIONS
             continue
         else:
             break  # synthesis accepted
@@ -239,7 +245,7 @@ def query_endpoint(request: QueryRequest, req: Request):
             "retry": {
                 "attempted": attempt>1,
                 "num_attempts": attempt,
-                "trigger": "low_source_diversity"
+                "trigger": list(retry_triggers)
             }
         },
         evidence_metrics=best_metrics,

@@ -130,7 +130,6 @@ elif reason == "out_of_scope":
 elif reason == "insufficient_evidence":
     st.warning(
         "⚠️ The available evidence is limited. "
-        "The answer below reflects only what is directly supported by the sources."
     )
 
     # Case 1: partial answer → explain and continue
@@ -148,7 +147,8 @@ elif reason == "insufficient_evidence":
         else:
             st.info(
                 "No meaningful answer could be produced from the available literature."
-            )       
+            )
+        st.stop()       
 
 
 # ---------------------------------------------------------------------
