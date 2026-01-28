@@ -45,13 +45,13 @@ def response_to_markdown(response: Dict[str, Any]) -> str:
 
     # Limitations
     if response.get("limitations"):
-        lines.append("\n## Limitations\n")
+        lines.append("\n# Limitations\n")
         for lim in response["limitations"]:
             lines.append(f"- {lim}")
 
     # Sources
     if response.get("sources"):
-        lines.append("\n## Sources\n")
+        lines.append("\n# Sources\n")
         for src in response["sources"]:
             author_year = f"{src['authors']} ({src['year']})"
             journal = f", {src['journal']}" if src.get("journal") else ""
@@ -65,5 +65,12 @@ def response_to_markdown(response: Dict[str, Any]) -> str:
         lines.append("\n## Evidence Metrics\n")
         for k, v in metrics.items():
             lines.append(f"- **{k.replace('_', ' ').title()}**: {v}")
+
+    # Evidence metrics
+    confidence = response.get("confidence")
+    if confidence:
+        lines.append("\n## Confidence\n")
+        for k, v in confidence.items():
+            lines.append(f"{k.title()}: {v}")
 
     return "\n".join(lines)

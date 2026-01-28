@@ -22,7 +22,7 @@ def compute_confidence(metrics, reason):
     # --- Label ---
     if score >= 0.75:
         label = "High"
-    elif score >= 0.40:
+    elif score >= 0.45:
         label = "Medium"
     else:
         label = "Low"

@@ -80,11 +80,12 @@ class QueryResponse(BaseModel):
         default=None,
         description="Evidence quality metrics; None if synthesis failed"
     )
-    debug: Dict = Field(
-        default_factory=dict,
-        description="Debug info"
-    )
     confidence: Optional[Confidence] = Field(
         default=None,
         description="Overall confidence in the synthesized answer; None if generation failed"
     )
+    debug: Dict = Field(
+        default_factory=dict,
+        description="Debug info"
+    )
+    

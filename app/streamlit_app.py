@@ -111,30 +111,33 @@ if not data:
 reason = data.get("reason", "none")
 
 if reason == "generation_failed":
-    st.warning("⚠️ Unable to generate a reliable answer.")
-    st.markdown(
-        "The system could not generate a stable synthesis from the available evidence."
+    st.error(
+    "The system could not generate a reliable answer this time. "
+    "Please try again."
     )
     st.stop()
 
 
 elif reason == "out_of_scope":
-    st.warning("⚠️ The question cannot be answered from the available sources.")
-    if data.get("limitations"):
-        st.markdown("**Reason:**")
-        for lim in data["limitations"]:
-            st.write(f"{lim}")
+    st.warning("The question cannot be answered from the available sources.")
+    with st.expander("Why might this happen?"):
+        st.markdown(
+            "- The question is outside the scope of the indexed literature\n"
+            "- The topic is only indirectly related or highly interdisciplinary\n"
+            "- Key concepts may be phrased differently in academic sources\n"
+            "- Relevance detection is conservative to avoid unsupported answers"
+        )
     st.stop()
 
 
 elif reason == "insufficient_evidence":
     st.warning(
-        "⚠️ The available evidence is limited. "
+        "⚠️ The available evidence is limited."
     )
 
     # Case 1: partial answer → explain and continue
     if data.get("answer", []):
-        st.caption(
+        st.info(
             "The answer below reflects only what is directly supported by the sources."
         )
     
@@ -143,7 +146,7 @@ elif reason == "insufficient_evidence":
         limitations = data.get("limitations", [])
         if limitations:
             for lim in limitations:
-                st.markdown(f"{lim}")
+                st.info(lim)
         else:
             st.info(
                 "No meaningful answer could be produced from the available literature."
@@ -152,31 +155,42 @@ elif reason == "insufficient_evidence":
 
 
 # ---------------------------------------------------------------------
+# Confidence level
+# ---------------------------------------------------------------------
+
+if reason != "insufficient_evidence":
+    
+    label = data["confidence"]["label"]
+    score = data["confidence"]["score"]
+    explanation = data["confidence"]["explanation"]
+
+    if label == "High":
+        st.success(f"Confidence: {label}")
+    elif label == "Medium":
+        st.warning(f"Confidence: {label}")
+    else:
+        st.error(f"Confidence: {label}")
+
+    st.caption(
+        "Confidence reflects how well the answer is supported by multiple independent sources."
+    )
+
+    with st.expander("Why this confidence level?"):
+        if explanation:
+            for item in explanation:
+                st.markdown(f"- {item}")
+        else:
+            st.markdown(
+                "No specific confidence drivers were triggered. "
+                "This confidence level reflects an overall assessment of the available evidence."
+            )
+
+
+# ---------------------------------------------------------------------
 # Synthesized answer (inline citations)
 # ---------------------------------------------------------------------
-# st.subheader("🧠 Synthesized Answer")
 
-label = data["confidence"]["label"]
-score = data["confidence"]["score"]
-explanation = data["confidence"]["explanation"]
-
-if label == "High":
-    st.success(f"Confidence: {label}")
-elif label == "Medium":
-    st.warning(f"Confidence: {label}")
-else:
-    st.error(f"Confidence: {label}")
-
-st.caption(
-    "Confidence reflects how well the answer is supported by multiple independent sources."
-)
-
-with st.expander("Why this confidence level?"):
-    for item in explanation:
-        st.markdown(f"- {item}")
-
-st.subheader("🧠 Synthesized Answer")
-st.markdown("### Synthesized Answer")
+st.subheader("Synthesized Answer")
 
 for item in data.get("answer", []):
     st.markdown(render_sentence_with_inline_citations(item))
@@ -185,7 +199,8 @@ for item in data.get("answer", []):
 # Limitations
 # ---------------------------------------------------------------------
 if data.get("limitations"):
-    st.subheader("⚠️ Limitations")
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("Limitations")
     for lim in data["limitations"]:
         st.write(f"{lim}")
 
@@ -193,7 +208,8 @@ if data.get("limitations"):
 # Sources (paper-level bibliography)
 # ---------------------------------------------------------------------
 if data.get("sources"):
-    st.subheader("📚 Sources")
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("Sources")
     for src in data["sources"]:
         author_year = f"{src['authors']} ({src['year']})"
         journal = f" — {src['journal']}" if src.get("journal") else ""
@@ -208,8 +224,8 @@ if data.get("sources"):
 # ---------------------------------------------------------------------
 # Metadata
 # ---------------------------------------------------------------------
-st.markdown("<br><br>", unsafe_allow_html=True)
-with st.expander("⏱️ Metadata", expanded=False):
+st.markdown("<br>", unsafe_allow_html=True)
+with st.expander("Metadata", expanded=False):
     st.json(data.get("meta", {}))
 
 # ---------------------------------------------------------------------
@@ -218,7 +234,7 @@ with st.expander("⏱️ Metadata", expanded=False):
 metrics = data.get("evidence_metrics")
 
 if metrics is not None:
-    with st.expander("📊 Evidence Metrics", expanded=False):
+    with st.expander("Evidence Metrics", expanded=False):
         
         if not metrics:
             st.info("Evidence metrics are unavailable for this response.")
@@ -259,7 +275,7 @@ if metrics is not None:
 debug = data.get("debug")
 
 with st.sidebar:
-    show_debug = st.checkbox("🧪 Show debug panel", value=False)
+    show_debug = st.checkbox("Show debug panel", value=False)
 
 if show_debug and debug:
     chunks = debug.get("chunks", [])
@@ -271,7 +287,7 @@ if show_debug and debug:
 
     if papers and chunks:
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("### 📄 Evidence Trace")
+        st.subheader("Evidence Trace")
 
         for paper in papers:
             paper_id = paper["paper_id"]
@@ -319,31 +335,9 @@ if show_debug and debug:
     else:
         st.info("No debug information available for this response.")
 
-# with st.expander("Export results"):
-#     export_format = st.radio(
-#         "Choose format",
-#         options=["JSON", "Markdown"],
-#         horizontal=True,
-#     )
-
-#     if export_format == "JSON":
-#         data_export = response_to_json(data)
-#         filename = "query_response.json"
-#         mime = "application/json"
-#     else:
-#         data_export = response_to_markdown(data)
-#         filename = "query_response.md"
-#         mime = "text/markdown"
-
-#     st.download_button(
-#         label="Download",
-#         data=data_export,
-#         file_name=filename,
-#         mime=mime,
-#     )
 
 st.markdown("---")
-st.markdown("### ⬇️ Export")
+st.subheader("Export")
 
 col_left, col_center, col_right = st.columns([1, 2, 1])
 
@@ -373,7 +367,7 @@ with col_center:
             mime = "text/markdown"
 
         st.download_button(
-            label="⬇️ Download results",
+            label="Download results",
             data=data_export,
             file_name=filename,
             mime=mime,

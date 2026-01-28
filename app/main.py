@@ -249,6 +249,6 @@ def query_endpoint(request: QueryRequest, req: Request):
             }
         },
         evidence_metrics=best_metrics,
-        debug=debug, 
-        confidence = confidence
+        confidence = confidence,
+        debug=debug
     )
