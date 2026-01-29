@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 
 from app.dependencies import load_system
 from app.schemas import QueryRequest, QueryResponse, Sentence, Confidence
-from app.utils.synthesis_prompt import TASK_HEADER, CORE_SYNTHESIS_INSTRUCTIONS, RETRY_PROMPTS
+from app.utils.synthesis_prompt import SCOPE_CLASSIFIER_PROMPT, TASK_HEADER, CORE_SYNTHESIS_INSTRUCTIONS, RETRY_PROMPTS
 from app.utils.citations import remove_citations_inside_text, resolve_answer_citations, build_source_entry
 from app.utils.heuristics import determine_reason, determine_retry_reason
 from app.utils.evidence_analysis import aggregate_evidence, extract_sentence_paper_ids, compute_evidence_metrics, get_debug_info
@@ -45,9 +45,22 @@ def query_endpoint(request: QueryRequest, req: Request):
     
     logger = logging.getLogger(__name__)
     start_time = time.perf_counter()
+    scope_classifier = req.app.state.scope_classifier
     retriever = req.app.state.retriever
-    synthesizer = req.app.state.synthesizer
     relevance_gate = req.app.state.relevance_gate
+    synthesizer = req.app.state.synthesizer
+    
+    #
+    # --- Zero-shot classification of scope---
+    #
+    if not scope_classifier.is_in_scope(request.question, SCOPE_CLASSIFIER_PROMPT):
+        return QueryResponse(
+            question=request.question,
+            reason="out_of_scope",
+            answer=[],
+            limitations=["The available literature does not address the question."],
+            sources=[],
+        )
 
     #
     # --- Retrieval ---
@@ -80,15 +93,14 @@ def query_endpoint(request: QueryRequest, req: Request):
     relevant = relevance_gate.is_relevant(request.question, retrieved_chunks)
 
     if not relevant:
-        # rationale = None
-        # if explain:
-        #     rationale = llm_explain_irrelevance(question, retrieved_chunks)
-
         return QueryResponse(
             question=request.question,
-            reason="out_of_scope",
+            reason="insufficient_evidence",
             answer=[],
-            limitations=["The available literature does not address the question."],
+            limitations=[
+                "The retrieved literature did not contain sufficiently relevant evidence to support a reliable answer to the question.",
+                "This topic may be discussed in the literature at the level of specific technologies, projects, or local contexts rather than in general terms."
+                ],
             sources=[],
             meta={
                 "relevance_gate": {
@@ -109,7 +121,7 @@ def query_endpoint(request: QueryRequest, req: Request):
         for c in retrieved_chunks
     }
 
-    max_attempts = 3
+    max_attempts = 2
     attempt = 0
     synthesis_output = None
     best_output, best_score = None, -1

@@ -1,12 +1,20 @@
 
 def determine_reason(synthesis_output, chunk_lookup):
     """
-    Qualitative failure explanation.
-    Useful for user-facing messages.
-    
-    :param synthesis_output: Description
-    :param chunk_lookup: Description
+    Determine whether a synthesized answer should be marked as having
+    insufficient evidence, based on simple structural heuristics.
+
+    The function checks for:
+    - Presence of an answer
+    - Presence of citations for every sentence
+    - Minimum diversity of cited papers
+    - Minimum number of cited evidence chunks
+
+    Returns:
+        "insufficient_evidence" if the heuristics are not met,
+        otherwise "none".
     """
+    
     answer = synthesis_output.get("answer", [])
 
     # insufficient evidence if the answer is empty or there is some sentence without citations
@@ -33,21 +41,12 @@ def determine_reason(synthesis_output, chunk_lookup):
     if len(cited_papers) < 3:
         return "insufficient_evidence"
 
-
     return "none"
 
 
-# def should_retry(metrics):
-#     if (
-#         metrics["retrieved_papers"] > 3
-#         and metrics["paper_dominance"] > 0.7
-#         and metrics["paper_coverage"] < 0.5
-#     ):
-#         return True
-#     return False
-
 
 def determine_retry_reason(metrics, threshold=0.3):
+    
     failures = {
         # High when one paper dominates despite low overall coverage
         "source_diversity": (

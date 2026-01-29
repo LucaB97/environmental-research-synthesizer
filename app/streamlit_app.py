@@ -120,13 +120,14 @@ if reason == "generation_failed":
 
 elif reason == "out_of_scope":
     st.warning("The question cannot be answered from the available sources.")
-    with st.expander("Why might this happen?"):
-        st.markdown(
-            "- The question is outside the scope of the indexed literature\n"
-            "- The topic is only indirectly related or highly interdisciplinary\n"
-            "- Key concepts may be phrased differently in academic sources\n"
-            "- Relevance detection is conservative to avoid unsupported answers"
-        )
+    # st.info("The question is outside the scope of the indexed literature")
+    # with st.expander("Why might this happen?"):
+    #     st.markdown(
+    #         "- The question is outside the scope of the indexed literature\n"
+    #         "- The topic is only indirectly related or highly interdisciplinary\n"
+    #         "- Key concepts may be phrased differently in academic sources\n"
+    #         "- Relevance detection is conservative to avoid unsupported answers"
+    #     )
     st.stop()
 
 
@@ -151,6 +152,12 @@ elif reason == "insufficient_evidence":
             st.info(
                 "No meaningful answer could be produced from the available literature."
             )
+        
+        if data.get("meta", {}):
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.expander("Metadata", expanded=False):
+                st.json(data.get("meta", {}))
+                
         st.stop()       
 
 

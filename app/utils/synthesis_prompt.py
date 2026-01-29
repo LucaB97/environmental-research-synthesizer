@@ -1,3 +1,16 @@
+SCOPE_CLASSIFIER_PROMPT = """
+You are classifying user questions.
+
+Is the following question intended to be answered using peer-reviewed academic research 
+on the environmental or social impacts of renewable energy adoption or energy transition?
+
+Answer ONLY with "yes" or "no".
+
+Question:
+{{QUESTION}}
+"""
+
+
 TASK_HEADER = """
 You are an expert research assistant specialized in environmental and social impact analysis.
 You synthesize evidence strictly from the provided peer-reviewed academic sources.
