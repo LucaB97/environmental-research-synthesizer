@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 
-from utils.inline_citations import render_sentence_with_inline_citations
+from utils.citations import CitationStyle, render_sentence_with_inline_citations
 from utils.export import response_to_json, response_to_markdown
 # ---------------------------------------------------------------------
 # Page config
@@ -196,11 +196,12 @@ if reason != "insufficient_evidence":
 # ---------------------------------------------------------------------
 # Synthesized answer (inline citations)
 # ---------------------------------------------------------------------
+citation_style = CitationStyle.NUMERIC
 
 st.subheader("Synthesized Answer")
 
 for item in data.get("answer", []):
-    st.markdown(render_sentence_with_inline_citations(item))
+    st.markdown(render_sentence_with_inline_citations(item, citation_style))
 
 # ---------------------------------------------------------------------
 # Limitations
@@ -217,13 +218,23 @@ if data.get("limitations"):
 if data.get("sources"):
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("Sources")
+
     for src in data["sources"]:
-        author_year = f"{src['authors']} ({src['year']})"
+        authors = src["authors"]
+        year = src["year"]
+        title = src["title"]
         journal = f" — {src['journal']}" if src.get("journal") else ""
+
+        if citation_style == CitationStyle.NUMERIC:
+            number = src.get("citation_number")
+            prefix = f"[{number}] " if number is not None else ""
+        else:
+            prefix = ""
+
         st.markdown(
             f"<div style='margin-bottom:8px;'>"
-            f"<small>{author_year}{journal}</small><br>"
-            f"<strong>{src['title']}</strong>"
+            f"<small>{prefix}{authors} ({year}){journal}</small><br>"
+            f"<strong>{title}</strong>"
             f"</div>",
             unsafe_allow_html=True
         )

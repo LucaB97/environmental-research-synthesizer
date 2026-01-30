@@ -37,6 +37,10 @@ class Source(BaseModel):
         None,
         description="Journal or conference where the paper was published"
     )
+    citation_number: Optional[int] = Field(
+        None,
+        description="Numeric citation identifier used in the answer"
+    )
 
 
 class Confidence(BaseModel):

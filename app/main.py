@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from app.dependencies import load_system
 from app.schemas import QueryRequest, QueryResponse, Sentence, Confidence
 from app.utils.synthesis_prompt import SCOPE_CLASSIFIER_PROMPT, TASK_HEADER, CORE_SYNTHESIS_INSTRUCTIONS, RETRY_PROMPTS
-from app.utils.citations import remove_citations_inside_text, resolve_answer_citations, build_source_entry
+from app.utils.citations import build_citation_index, build_sources, CitationStyle, FORMATTERS, resolve_answer_citations, remove_citations_inside_text 
 from app.utils.heuristics import determine_reason, determine_retry_reason
 from app.utils.evidence_analysis import aggregate_evidence, extract_sentence_paper_ids, compute_evidence_metrics, get_debug_info
 from app.utils.confidence import compute_confidence
@@ -225,22 +225,21 @@ def query_endpoint(request: QueryRequest, req: Request):
     synthesis_time = time.perf_counter() - t1
     total_time = time.perf_counter() - start_time
 
+    ## Build list of sources
+    citation_index = build_citation_index(best_sentence_papers)
+    sources = build_sources(citation_index, source_lookup)
+
+    debug = get_debug_info(best_aggregation)
+    confidence = Confidence(score=best_score, label=best_label, explanation=best_explanation)
+    
     #
     # --- Output preparation ---
     #
-
-    ## Use citations in the [Authors, Year] format 
-    resolved_answer = resolve_answer_citations(best_output["answer"], source_lookup)
     
-    ## Remove references from synthesis text
-    resolved_answer = remove_citations_inside_text(resolved_answer)
-
-    ## Build list of sources
-    cited_paper_ids = set().union(*best_sentence_papers)
-    sources = [build_source_entry(pid, source_lookup) for pid in cited_paper_ids]
-    debug = get_debug_info(best_aggregation)
-    confidence = Confidence(score=best_score, label=best_label, explanation=best_explanation)
-
+    style = CitationStyle.NUMERIC
+    resolved_answer = resolve_answer_citations(best_output["answer"], source_lookup, citation_index, FORMATTERS[style])
+    
+    resolved_answer = remove_citations_inside_text(resolved_answer) ## remove references from synthesis text
 
     return QueryResponse(
         question=request.question,
