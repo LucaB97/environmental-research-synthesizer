@@ -120,16 +120,43 @@ if reason == "generation_failed":
 
 elif reason == "out_of_scope":
     st.warning("The question cannot be answered from the available sources.")
-    # st.info("The question is outside the scope of the indexed literature")
-    # with st.expander("Why might this happen?"):
-    #     st.markdown(
-    #         "- The question is outside the scope of the indexed literature\n"
-    #         "- The topic is only indirectly related or highly interdisciplinary\n"
-    #         "- Key concepts may be phrased differently in academic sources\n"
-    #         "- Relevance detection is conservative to avoid unsupported answers"
-    #     )
     st.stop()
 
+
+elif reason == "absent_evidence":
+    st.warning("The retrieved literature does not contain evidence addressing this question.")
+    if data.get("meta", {}):
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.expander("Metadata", expanded=False):
+            st.json(data.get("meta", {}))
+    st.stop()
+
+
+elif reason == "isolated_evidence":
+    st.warning("The retrieved evidence is too narrow and context-specific to support synthesis.")
+    if data.get("meta", {}):
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.expander("Metadata", expanded=False):
+            st.json(data.get("meta", {}))
+
+    debug = data.get("debug")
+
+    with st.sidebar:
+        show_debug = st.checkbox("Show relevant evidence", value=False)
+    
+    if show_debug and debug:
+        chunks = debug.get("chunks", [])
+    
+        if chunks:
+            st.markdown("<br>", unsafe_allow_html=True)
+            for chunk in chunks:
+                st.markdown("---")
+                st.markdown(f"**📄 {chunk['title']}**")
+                st.caption(f"{chunk['authors']} ({chunk['year']})")
+                st.text_area("Excerpt", chunk['text'], height=120)
+        else:
+            st.info("No information available.")
+    st.stop()
 
 elif reason == "insufficient_evidence":
     st.warning(

@@ -15,7 +15,7 @@ from app.utils.synthesis import QueryScopeClassifier, ResearchSynthesisEngine
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 METADATA_PATH = PROJECT_ROOT / "data" / "metadata.csv"
 CHUNKS_PATH = PROJECT_ROOT / "data" / "chunks_500t_100o.json"
-FAISS_PATH = PROJECT_ROOT / "data" / "faiss_openai.index"
+FAISS_PATH = PROJECT_ROOT / "data" / "faiss_openai_500t_100o.index"
 
 
 def load_system(app, profile: Optional[str] = None):
@@ -55,7 +55,7 @@ def load_system(app, profile: Optional[str] = None):
     synthesizer = ResearchSynthesisEngine(llm, max_attempts=3)
 
     # ---- Attach to app ----
-    app.state.metadata = pd.read_csv(METADATA_PATH)
+    app.state.metadata = pd.read_csv(METADATA_PATH).set_index("paper_id")
     app.state.scope_classifier = scope_classifier
     app.state.retriever = retriever
     app.state.relevance_gate = relevance_gate

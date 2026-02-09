@@ -63,6 +63,8 @@ class QueryResponse(BaseModel):
     reason: Literal[
         "none",
         "out_of_scope",
+        "absent_evidence",
+        "isolated_evidence",
         "insufficient_evidence",
         "generation_failed",
         "retrieval_failed"

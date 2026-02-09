@@ -28,7 +28,12 @@ class ResearchSynthesisEngine:
     def build_prompt(self, question, chunks, prompt_template):
         sources_text = ""
         for c in chunks:
-            tags = [t for t in [c.get("first_tag"), c.get("second_tag")] if t]
+            raw_tags = [c.get("first_tag"), c.get("second_tag")]
+            tags = [
+                str(t) for t in raw_tags
+                if t is not None and isinstance(t, str) and t.lower() != "nan"
+            ]
+            
             sources_text += f"""
 SOURCE:
 chunk_id: {c['chunk_id']}

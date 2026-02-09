@@ -21,16 +21,31 @@ class RelevanceGate:
     def is_relevant(self, question, chunks):
         scores = self.score(question, chunks)
         strong_hits = sum(s >= self.min_score for s in scores)
-        return strong_hits >= self.min_hits
+        return strong_hits >= self.min_hits, strong_hits
 
     
-    def debug(self, question, chunks):
+    def debug(self, question, chunks, show_only_relevant=False):
         scores = self.score(question, chunks)
-        return [
-            {
-                "chunk_id": c["chunk_id"],
-                "score": float(score),
-                "paper_id": c["paper_id"]
-            }
-            for c, score in zip(chunks, scores)
-        ]
+        
+        if show_only_relevant:
+            return [
+                {
+                    "chunk_id": c["chunk_id"],
+                    "paper_id": c["paper_id"],
+                    "text": c["text"],
+                    "score": float(score)
+                }
+                for c, score in zip(chunks, scores) if score >= self.min_score
+            ]
+        
+        else:
+            return [
+                {
+                    "chunk_id": c["chunk_id"],
+                    "paper_id": c["paper_id"],
+                    "text": c["text"],
+                    "score": float(score),
+                    "strong_hit": score >= self.min_score
+                }
+                for c, score in zip(chunks, scores)
+            ]

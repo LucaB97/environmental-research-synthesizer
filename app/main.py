@@ -1,3 +1,4 @@
+import pandas as pd
 import time
 import logging
 from fastapi import FastAPI, Request
@@ -46,6 +47,7 @@ def query_endpoint(request: QueryRequest, req: Request):
     
     logger = logging.getLogger(__name__)
     start_time = time.perf_counter()
+    metadata = req.app.state.metadata
     scope_classifier = req.app.state.scope_classifier
     retriever = req.app.state.retriever
     relevance_gate = req.app.state.relevance_gate
@@ -90,32 +92,68 @@ def query_endpoint(request: QueryRequest, req: Request):
                 },
         )
 
-
-    relevant = relevance_gate.is_relevant(request.question, retrieved_chunks)
+    relevant, num_relevant_chunks = relevance_gate.is_relevant(request.question, retrieved_chunks)
 
     if not relevant:
-        return QueryResponse(
-            question=request.question,
-            reason="insufficient_evidence",
-            answer=[],
-            limitations=[
-                "The retrieved literature did not contain sufficiently relevant evidence to support a reliable answer to the question.",
-                "This topic may be discussed in the literature at the level of specific technologies, projects, or local contexts rather than in general terms."
-                ],
-            sources=[],
-            meta={
-                "relevance_gate": {
-                    "method": "cross_encoder",
-                    "passed": False
-                    # "rationale": rationale
+
+        if num_relevant_chunks == 0:
+            return QueryResponse(
+                question=request.question,
+                reason="absent_evidence",
+                answer=[],
+                limitations=[],
+                sources=[],
+                meta={
+                    "relevance_gate": {
+                        "method": "cross_encoder",
+                        "passed": False
+                    }
                 }
-            }
-        )
+            )
+        
+        else:
+            relevant_chunks = relevance_gate.debug(request.question, retrieved_chunks, show_only_relevant=True)
+            for c in relevant_chunks:
+                c_metadata = metadata.loc[c["paper_id"]]
+                c['title'] = str(c_metadata['title'])
+                c['authors'] = str(c_metadata['authors'])
+                c['year'] = int(c_metadata['year'])
+                c['journal'] = str(c_metadata['journal'])
+            
+            debug = {"chunks": relevant_chunks}
+
+            return QueryResponse(
+                question=request.question,
+                reason="isolated_evidence",
+                answer=[],
+                limitations=[
+                    "The retrieved literature did not contain sufficiently relevant evidence to support a reliable answer to the question.",
+                    "This topic may be discussed in the literature at the level of specific technologies, projects, or local contexts rather than in general terms."
+                    ],
+                sources=[],
+                meta={
+                    "relevance_gate": {
+                        "method": "cross_encoder",
+                        "passed": False
+                    }
+                }, 
+                debug = debug
+            )
+            
 
 
     #
     # --- Synthesis ---
     #    
+
+    for c in retrieved_chunks:
+        c_metadata = metadata.loc[c["paper_id"]]
+        c['title'] = str(c_metadata['title'])
+        c['authors'] = str(c_metadata['authors'])
+        c['year'] = int(c_metadata['year'])
+        c['journal'] = str(c_metadata['journal'])
+        c['first_tag'] = (None if pd.isna(c_metadata['first_tag']) else str(c_metadata['first_tag']))
+        c['second_tag'] = (None if pd.isna(c_metadata['second_tag']) else str(c_metadata['second_tag']))
 
     source_lookup = {
         c["chunk_id"]: c

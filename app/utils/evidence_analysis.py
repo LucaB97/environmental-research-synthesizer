@@ -37,6 +37,7 @@ def aggregate_evidence(retrieved_chunks, used_chunk_ids):
         p["title"] = c.get("title")
         p["authors"] = c.get("authors")
         p["year"] = c.get("year")
+        p["journal"] = c.get("journal")
 
     return {    #<--aggregation
         "chunks": chunks,
