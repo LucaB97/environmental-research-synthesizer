@@ -4,20 +4,60 @@ def compute_confidence(metrics, reason):
     and short explanations based on evidence strength.
     """
 
-    # --- Score ---
-    paper_coverage = metrics.get("paper_coverage", 0.0)
+    used_papers = metrics.get("used_papers", 0)
     paper_dominance = metrics.get("paper_dominance", 1.0)
     multi_source_ratio = metrics.get("multi_source_sentence_ratio", 0.0)
 
     score = 1.0
-    score -= 0.5 * (1 - paper_coverage)
-    score -= 0.3 * paper_dominance
-    score -= 0.2 * (1 - multi_source_ratio)
+    signals = []
 
-    score = max(0.0, round(score, 2))
+    # --- Evidence sufficiency (absolute, not relative) ---
+    if used_papers == 0:
+        score -= 0.7
+        signals.append(
+            "The answer is not directly supported by retrieved research papers."
+        )
+    elif used_papers < 2:
+        score -= 0.4
+        signals.append(
+            "The answer relies on very limited research evidence."
+        )
+    elif used_papers < 4:
+        score -= 0.2
+        signals.append(
+            "The answer is supported by a small number of research papers."
+        )
 
+    # --- Evidence robustness ---
+    if paper_dominance > 0.6:
+        score -= 0.3
+        signals.append(
+            "The synthesis relies heavily on a single paper."
+        )
+    elif paper_dominance > 0.4:
+        score -= 0.15
+        signals.append(
+            "One paper contributes more heavily than others."
+        )
+
+    if multi_source_ratio == 0:
+        score -= 0.4
+        signals.append(
+            "None of the claims are supported by multiple independent sources."
+        )
+    elif multi_source_ratio < 0.3:
+        score -= 0.2
+        signals.append(
+            "Only a small fraction of claims are supported by multiple independent sources."
+        )
+    elif multi_source_ratio > 0.6:
+        score += 0.05  # small bonus for strong corroboration
+
+    # --- Reason-based cap ---
     if reason == "insufficient_evidence":
         score = min(score, 0.4)
+
+    score = max(0.0, min(1.0, round(score, 2)))
 
     # --- Label ---
     if score >= 0.75:
@@ -27,33 +67,12 @@ def compute_confidence(metrics, reason):
     else:
         label = "Low"
 
-    # --- Explanations ---
-    signals = []
-
-    if paper_coverage < 0.5:
-        signals.append(
-            "Only a small portion of the retrieved papers contributed to the answer."
-        )
-
-    if paper_dominance > 0.5:
-        signals.append(
-            "The synthesis relies heavily on a single paper."
-        )
-
-    if multi_source_ratio == 0:
-        signals.append(
-            "None of the claims are supported by multiple independent sources."
-        )
-    elif multi_source_ratio < 0.3:
-        signals.append(
-            "Only a small fraction of claims are supported by multiple independent sources."
-        )
-
+    # --- Explanation ---
     if label == "High":
         explanation = [
-            "The answer is supported by multiple independent sources with good coverage."
+            "The answer is supported by multiple independent sources with sufficient and balanced evidence."
         ]
     else:
-        explanation = signals[:3]  # safe even if <2
+        explanation = signals[:3]
 
     return score, label, explanation

@@ -29,13 +29,14 @@ def health_check(req: Request):
 
     return {
         "status": "ok",
-        "scope_classifier_loaded": hasattr(req.app.state, "scope_classifier"),
+        "metadata_loaded": hasattr(req.app.state, "metadata"),
         "index_loaded": (
             retriever is not None
             and hasattr(retriever, "index")
             and retriever.index is not None
         ),
         "index_size": retriever.index.ntotal if retriever else None,
+        "scope_classifier_loaded": hasattr(req.app.state, "scope_classifier"),
         "retriever_loaded": retriever is not None,
         "relevance_gate_loaded": hasattr(req.app.state, "relevance_gate"),
         "synthesizer_loaded": hasattr(req.app.state, "synthesizer"),
@@ -80,10 +81,10 @@ def query_endpoint(request: QueryRequest, req: Request):
     if not retrieved_chunks:
         return QueryResponse(
             question=request.question,
-            reason="retrieval_failed",
+            reason="retrieval_empty",
             answer=[],
             limitations=[
-                "The system was unable to retrieve information to be used for synthesis."
+                "No documents could be retrieved for this question."
             ],
             sources=[],
             meta={
@@ -91,6 +92,7 @@ def query_endpoint(request: QueryRequest, req: Request):
                 "chunks_retrieved": 0
                 },
         )
+
 
     relevant, num_relevant_chunks = relevance_gate.is_relevant(request.question, retrieved_chunks)
 
@@ -101,12 +103,13 @@ def query_endpoint(request: QueryRequest, req: Request):
                 question=request.question,
                 reason="absent_evidence",
                 answer=[],
-                limitations=[],
+                limitations=["The literature retrieved is topically related, but does not address this question directly."],
                 sources=[],
                 meta={
                     "relevance_gate": {
                         "method": "cross_encoder",
-                        "passed": False
+                        "passed": False,
+                        "reason": "absent evidence"
                     }
                 }
             )
@@ -126,21 +129,18 @@ def query_endpoint(request: QueryRequest, req: Request):
                 question=request.question,
                 reason="isolated_evidence",
                 answer=[],
-                limitations=[
-                    "The retrieved literature did not contain sufficiently relevant evidence to support a reliable answer to the question.",
-                    "This topic may be discussed in the literature at the level of specific technologies, projects, or local contexts rather than in general terms."
-                    ],
+                limitations=["The retrieved evidence is too narrow and context-specific to support synthesis across studies."],
                 sources=[],
                 meta={
                     "relevance_gate": {
                         "method": "cross_encoder",
-                        "passed": False
+                        "passed": False,
+                        "reason": "isolated evidence"
                     }
                 }, 
                 debug = debug
             )
             
-
 
     #
     # --- Synthesis ---

@@ -1,8 +1,22 @@
 SCOPE_CLASSIFIER_PROMPT = """
-You are classifying user questions.
+You are classifying user questions for a research synthesis system.
 
-Is the following question intended to be answered using peer-reviewed academic research 
-on the social impacts of renewable energy adoption or energy transition?
+The system ONLY covers peer-reviewed academic research on the SOCIAL impacts of renewable energy adoption or energy transition.
+
+Social impacts include effects on:
+- people, households, communities, or social groups
+- costs, affordability, or economic impacts
+- distributional effects, equity, or energy poverty
+- social acceptance, opposition, or participation
+- governance, decision-making, or institutions
+
+The system does NOT cover:
+- physical climate effects
+- environmental or ecological impacts
+- emissions, temperature, or climate system changes
+- technical or engineering performance
+
+Answer "yes" ONLY if the question clearly concerns SOCIAL impacts. Otherwise answer "no".
 
 Answer ONLY with "yes" or "no".
 
