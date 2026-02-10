@@ -32,12 +32,36 @@ st.markdown(
     "Answers are synthesized **only** from the underlying academic sources."
 )
 
+
+# ---------------------------------------------------------------------
+# Example queries
+# ---------------------------------------------------------------------
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("💡 Try an example query:")
+
+example_queries = [
+    "What are the costs and benefits of renewable energy adoption?",
+    "Do community-owned renewable energy projects lead to more equitable social outcomes than privately owned ones?",
+    "What is the societal response to renewable energy projects?"
+]
+
+cols = st.columns(len(example_queries))
+for i, ex in enumerate(example_queries):
+    if cols[i].button(ex):
+        st.session_state['question'] = ex  # pre-fill text area
+        # Clear previous answer immediately
+        if 'answer_placeholder' in st.session_state:
+            st.session_state['answer_placeholder'].empty()
 # ---------------------------------------------------------------------
 # Input
 # ---------------------------------------------------------------------
+if 'question' not in st.session_state:
+    st.session_state['question'] = ""
+
 question = st.text_area(
     "Research question",
-    placeholder="e.g. What are the social impacts of wind energy adoption?",
+    value=st.session_state['question'],
+    placeholder="Write your question here…",
 )
 
 top_k = st.slider(
@@ -322,13 +346,9 @@ with answer_placeholder.container():
                 with col2:
                     st.metric("Retrieved papers", metrics.get('retrieved_papers', 0))
                     st.metric("Unique papers used", metrics.get('used_papers', 0))
-                    st.metric(
-                        "Paper coverage",
-                        f"{metrics.get('paper_coverage', 0):.0%}"
-                    )
+                    st.metric("Paper dominance", metrics.get('paper_dominance', 0))
 
                 with col3:
-                    st.metric("Paper dominance", metrics.get('paper_dominance', 0))
                     st.metric(
                         "Avg citations / sentence",
                         metrics.get('avg_citations_per_sentence', 0)
