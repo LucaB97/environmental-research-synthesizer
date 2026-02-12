@@ -11,6 +11,8 @@ openai>=2.2.0
 tqdm>=4.60
 
 # App
+rank-bm25>=0.2.2
+nltk>=3.9.1
 fastapi>=0.124.4
 pydantic>=2.10.6
 typing>=3.7.4.3

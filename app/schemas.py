@@ -8,11 +8,17 @@ class QueryRequest(BaseModel):
         description="Natural language research question to be answered using the indexed literature",
         example="What are the economic impacts of replacing fossil fuels with wind energy?"
     )
-    top_k: int = Field(
-        default=15,
+    top_k_faiss: int = Field(
+        default=30,
         ge=1,
-        le=50,
-        description="Number of chunks to retrieve for synthesis"
+        le=100,
+        description="Number of chunks to be retrieved based on semantic similarity"
+    )
+    top_k_bm25: int = Field(
+        default=30,
+        ge=1,
+        le=100,
+        description="Number of chunks to be retrieved based on lexical matches"
     )
 
 

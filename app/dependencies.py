@@ -6,9 +6,9 @@ from typing import Optional
 
 from utils.embeddings import openai_embedding
 from utils.indexing import load_faiss
-from utils.retriever import SemanticRetriever
+from utils.retriever import SemanticRetriever, BM25Retriever, HybridRetriever
 from utils.llm_clients import OpenAIClient, HFClient
-from utils.cross_encoder import RelevanceGate
+from utils.cross_encoder import RelevanceProfiler
 from app.utils.synthesis import QueryScopeClassifier, ResearchSynthesisEngine
 
 # Paths
@@ -30,6 +30,8 @@ def load_system(app, profile: Optional[str] = None):
 
     index = load_faiss(FAISS_PATH)
     embedding_fn = openai_embedding
+    semantic_retriever = SemanticRetriever(index, chunks, embedding_fn)
+    bm25_retriever = BM25Retriever(chunks)
 
     # ---- LLM selection ----
     if profile == "public":
@@ -50,13 +52,13 @@ def load_system(app, profile: Optional[str] = None):
 
     # ---- Core components ----
     scope_classifier = QueryScopeClassifier(llm)
-    retriever = SemanticRetriever(index, chunks, embedding_fn)
-    relevance_gate = RelevanceGate("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    retriever = HybridRetriever(semantic_retriever, bm25_retriever)
+    relevance_profiler = RelevanceProfiler("cross-encoder/ms-marco-MiniLM-L-6-v2")
     synthesizer = ResearchSynthesisEngine(llm, max_attempts=3)
 
     # ---- Attach to app ----
     app.state.metadata = pd.read_csv(METADATA_PATH).set_index("paper_id")
     app.state.scope_classifier = scope_classifier
     app.state.retriever = retriever
-    app.state.relevance_gate = relevance_gate
+    app.state.relevance_profiler = relevance_profiler
     app.state.synthesizer = synthesizer

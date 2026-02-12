@@ -41,17 +41,31 @@ st.markdown("💡 Try an example query:")
 
 example_queries = [
     "What are the costs and benefits of renewable energy adoption?",
-    "Do community-owned renewable energy projects lead to more equitable social outcomes than privately owned ones?",
-    "What is the societal response to renewable energy projects?"
+    "How do ownership models shape social outcomes of renewable projects?",
+    "What is the impact of energy transition on the labour market?",
+    "How do political views affect the opinions on renewable energy?",
+    "What is the societal response to renewable energy projects?",
+    "Which social groups are most affected by renewable energy projects?"
 ]
 
-cols = st.columns(len(example_queries))
-for i, ex in enumerate(example_queries):
-    if cols[i].button(ex):
-        st.session_state['question'] = ex  # pre-fill text area
-        # Clear previous answer immediately
+row1 = example_queries[:3]
+row2 = example_queries[3:]
+
+cols1 = st.columns(3)
+for i, ex in enumerate(row1):
+    if cols1[i].button(ex):
+        st.session_state["question"] = ex
         if 'answer_placeholder' in st.session_state:
             st.session_state['answer_placeholder'].empty()
+
+cols2 = st.columns(3)
+for i, ex in enumerate(row2):
+    if cols2[i].button(ex):
+        st.session_state["question"] = ex
+        if 'answer_placeholder' in st.session_state:
+            st.session_state['answer_placeholder'].empty()
+
+st.markdown('</div>', unsafe_allow_html=True)
 # ---------------------------------------------------------------------
 # Input
 # ---------------------------------------------------------------------
@@ -64,13 +78,16 @@ question = st.text_area(
     placeholder="Write your question here…",
 )
 
-top_k = st.slider(
-    "Chunks to retrieve",
-    min_value=10,
-    max_value=30,
-    value=20,
-    step=5
-)
+# top_k = st.slider(
+#     "Chunks to retrieve",
+#     min_value=10,
+#     max_value=30,
+#     value=20,
+#     step=5
+# )
+
+top_k_faiss = 30
+top_k_bm25 = 30
 
 ask_button = st.button("Ask")
 
@@ -90,7 +107,7 @@ if ask_button:
             try:
                 response = requests.post(
                     API_URL,
-                    json={"question": question, "top_k": top_k},
+                    json={"question": question, "top_k_faiss": top_k_faiss, "top_k_bm25": top_k_bm25},
                     timeout=60,
                 )
                 st.session_state["data"] = response.json()
@@ -307,7 +324,7 @@ with answer_placeholder.container():
                 prefix = ""
 
             st.markdown(
-                f"<div style='margin-bottom:8px;'>"
+                f"<div style='margin-bottom:16px;'>"
                 f"<small>{prefix}{authors} ({year}){journal}</small><br>"
                 f"<strong>{title}</strong>"
                 f"</div>",

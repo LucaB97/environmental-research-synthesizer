@@ -30,15 +30,15 @@ def health_check(req: Request):
     return {
         "status": "ok",
         "metadata_loaded": hasattr(req.app.state, "metadata"),
-        "index_loaded": (
-            retriever is not None
-            and hasattr(retriever, "index")
-            and retriever.index is not None
-        ),
-        "index_size": retriever.index.ntotal if retriever else None,
+        # "index_loaded": (
+        #     retriever is not None
+        #     and hasattr(retriever, "index")
+        #     and retriever.index is not None
+        # ),
+        # "index_size": retriever.index.ntotal if retriever else None,
         "scope_classifier_loaded": hasattr(req.app.state, "scope_classifier"),
-        "retriever_loaded": retriever is not None,
-        "relevance_gate_loaded": hasattr(req.app.state, "relevance_gate"),
+        "retriever_loaded": hasattr(req.app.state, "retriever"),
+        "relevance_profiler_loaded": hasattr(req.app.state, "relevance_profiler"),
         "synthesizer_loaded": hasattr(req.app.state, "synthesizer"),
     }
 
@@ -51,7 +51,7 @@ def query_endpoint(request: QueryRequest, req: Request):
     metadata = req.app.state.metadata
     scope_classifier = req.app.state.scope_classifier
     retriever = req.app.state.retriever
-    relevance_gate = req.app.state.relevance_gate
+    relevance_profiler = req.app.state.relevance_profiler
     synthesizer = req.app.state.synthesizer
     
     #
@@ -71,10 +71,7 @@ def query_endpoint(request: QueryRequest, req: Request):
     #
     t0 = time.perf_counter()
     
-    retrieved_chunks = retriever.search(
-        request.question,
-        top_k=request.top_k
-    )
+    retrieved_chunks = retriever.search(request.question, top_k_faiss=request.top_k_faiss, top_k_bm25=request.top_k_bm25)
     
     retrieval_time = time.perf_counter() - t0
     
@@ -88,65 +85,60 @@ def query_endpoint(request: QueryRequest, req: Request):
             ],
             sources=[],
             meta={
-                "top_k": request.top_k,
+                "top_k": request.top_k_faiss + request.top_k_bm25,
                 "chunks_retrieved": 0
                 },
         )
 
+    t1 = time.perf_counter()
+    profile = relevance_profiler.rerank_and_profile(request.question, retrieved_chunks)
+    profiling_time = time.perf_counter() - t1
 
-    relevant, num_relevant_chunks = relevance_gate.is_relevant(request.question, retrieved_chunks)
-
-    if not relevant:
-
-        if num_relevant_chunks == 0:
-            return QueryResponse(
-                question=request.question,
-                reason="absent_evidence",
-                answer=[],
-                limitations=["The literature retrieved is topically related, but does not address this question directly."],
-                sources=[],
-                meta={
-                    "relevance_gate": {
-                        "method": "cross_encoder",
-                        "passed": False,
-                        "reason": "absent evidence"
-                    }
-                }
-            )
+    if profile["evidence_label"] == "absent":
+        return QueryResponse(
+            question=request.question,
+            reason="absent_evidence",
+            answer=[],
+            limitations=["The literature retrieved is topically related, but does not address this question directly."],
+            sources=[],
+            meta={
+                "chunks_requested": request.top_k_faiss + request.top_k_bm25,
+                "chunks_retrieved": len(retrieved_chunks),
+                "relevance_metrics": profile["metrics"]
+            }
+        )
         
-        else:
-            relevant_chunks = relevance_gate.debug(request.question, retrieved_chunks, show_only_relevant=True)
-            for c in relevant_chunks:
-                c_metadata = metadata.loc[c["paper_id"]]
-                c['title'] = str(c_metadata['title'])
-                c['authors'] = str(c_metadata['authors'])
-                c['year'] = int(c_metadata['year'])
-                c['journal'] = str(c_metadata['journal'])
-            
-            debug = {"chunks": relevant_chunks}
-
-            return QueryResponse(
-                question=request.question,
-                reason="isolated_evidence",
-                answer=[],
-                limitations=["The retrieved evidence is too narrow and context-specific to support synthesis across studies."],
-                sources=[],
-                meta={
-                    "relevance_gate": {
-                        "method": "cross_encoder",
-                        "passed": False,
-                        "reason": "isolated evidence"
-                    }
-                }, 
-                debug = debug
-            )
+    elif profile["evidence_label"] == "isolated":
+        strong_hit = relevance_profiler.get_strong_hits(profile["ranked_chunks"])
+        sh_metadata = metadata.loc[strong_hit["paper_id"]]
+        strong_hit['title'] = str(sh_metadata['title'])
+        strong_hit['authors'] = str(sh_metadata['authors'])
+        strong_hit['year'] = int(sh_metadata['year'])
+        strong_hit['journal'] = str(sh_metadata['journal'])
+        
+        return QueryResponse(
+            question=request.question,
+            reason="isolated_evidence",
+            answer=[],
+            limitations=["The retrieved evidence is too narrow and context-specific to support synthesis across studies."],
+            sources=[],
+            meta={
+                "chunks_requested": request.top_k_faiss + request.top_k_bm25,
+                "chunks_retrieved": len(retrieved_chunks),
+                "relevance_metrics": profile["metrics"]
+            }, 
+            debug = {"chunks": strong_hit}
+        )
             
 
     #
     # --- Synthesis ---
     #    
 
-    for c in retrieved_chunks:
+    top_N = 15
+    relevant_chunks = profile["ranked_chunks"][:top_N]
+
+    for c in relevant_chunks:
         c_metadata = metadata.loc[c["paper_id"]]
         c['title'] = str(c_metadata['title'])
         c['authors'] = str(c_metadata['authors'])
@@ -157,7 +149,7 @@ def query_endpoint(request: QueryRequest, req: Request):
 
     source_lookup = {
         c["chunk_id"]: c
-        for c in retrieved_chunks
+        for c in relevant_chunks
     }
 
     max_attempts = 2
@@ -169,7 +161,7 @@ def query_endpoint(request: QueryRequest, req: Request):
 
     prompt = TASK_HEADER + CORE_SYNTHESIS_INSTRUCTIONS
 
-    t1 = time.perf_counter()
+    t2 = time.perf_counter()
 
     while attempt < max_attempts:
         attempt += 1
@@ -177,7 +169,7 @@ def query_endpoint(request: QueryRequest, req: Request):
         try:
             synthesis_output = synthesizer.synthesize(
                 request.question,
-                retrieved_chunks,
+                relevant_chunks,
                 prompt
             )
         except ValueError as e:
@@ -216,7 +208,7 @@ def query_endpoint(request: QueryRequest, req: Request):
             for cid in sentence.get("citations", [])
         }
 
-        aggregation = aggregate_evidence(retrieved_chunks, used_chunks_ids)
+        aggregation = aggregate_evidence(relevant_chunks, used_chunks_ids)
         metrics = compute_evidence_metrics(aggregation, sentence_papers)
 
         failure_reason = determine_reason(synthesis_output, source_lookup)
@@ -261,7 +253,7 @@ def query_endpoint(request: QueryRequest, req: Request):
             sources=[],
         )
 
-    synthesis_time = time.perf_counter() - t1
+    synthesis_time = time.perf_counter() - t2
     total_time = time.perf_counter() - start_time
 
     ## Build list of sources
@@ -287,9 +279,11 @@ def query_endpoint(request: QueryRequest, req: Request):
         limitations=best_output["limitations"],
         sources=sources,
         meta={
-            "top_k": request.top_k,
+            "chunks_requested": request.top_k_faiss + request.top_k_bm25,
             "chunks_retrieved": len(retrieved_chunks),
+            "relevance_metrics": profile["metrics"],
             "retrieval_time_sec": round(retrieval_time, 3),
+            "profiling_time_sec": round(profiling_time, 3),
             "synthesis_time_sec": round(synthesis_time, 3),
             "total_time_sec": round(total_time, 3),
             "retry": {
