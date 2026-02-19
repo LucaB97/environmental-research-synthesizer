@@ -50,17 +50,29 @@ class Source(BaseModel):
 
 
 class Confidence(BaseModel):
-    score: float = Field(
+    structure_score: float = Field(
         ge=0.0,
         le=1.0,
-        description="Confidence score in [0, 1]"
+        description="Evidence structure strength"
     )
-    label: Literal["Very High", "High", "Moderate", "Low", "Very Low", "None"] = Field(
-        description="Human-readable confidence level"
+    grounding_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Grounding quality of the synthesis"
+    )
+    region_label: Literal[
+        "Strong Support",
+        "Moderate Support",
+        "Limited but Careful",
+        "Strong Evidence, Weak Integration",
+        "Low Support",
+        "Not applicable"
+    ] = Field(
+        description="Qualitative interpretation of the 2D epistemic state"
     )
     explanation: List[str] = Field(
         ...,
-        description="One or more coincise messages to explain the displayed confidence level"
+        description="Concise messages explaining the confidence assessment"
     )
 
 
@@ -74,29 +86,6 @@ class QueryResponse(BaseModel):
         "generation_error"
     ] = Field(
         description="Technical execution status of the pipeline"
-    )
-    
-    evidence_structure: Literal[
-        "absent",
-        "isolated",
-        "weak",
-        "fragmented",
-        "thematic",
-        "robust"
-    ] = Field(
-        description="Structural characterization of retrieved evidence"
-    )
-
-    grounding_quality: Literal[
-        "not_applicable",   # e.g. no synthesis performed
-        "not_answered", # the synthesizer abstains
-        "very_weak",
-        "weak",
-        "partial",
-        "strong",
-        "complete"
-    ] = Field(
-        description="Quality of citation grounding in the synthesized answer"
     )
     
     answer: List[Sentence] = Field(
@@ -123,7 +112,7 @@ class QueryResponse(BaseModel):
     
     confidence: Optional[Confidence] = Field(
         default=None,
-        description="Overall confidence in the synthesized answer; None if generation failed"
+        description="Overall confidence in the synthesized answer; None if pipeline failed"
     )
     
     debug: Dict = Field(

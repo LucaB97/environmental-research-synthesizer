@@ -10,7 +10,7 @@ from app.utils.synthesis_prompt import SCOPE_CLASSIFIER_PROMPT, TASK_HEADER, COR
 from app.utils.citations import build_citation_index, build_sources, CitationStyle, FORMATTERS, resolve_answer_citations, remove_citations_inside_text 
 from app.utils.heuristics import determine_retry_reason
 from app.utils.evidence_analysis import aggregate_evidence, extract_sentence_paper_ids, compute_evidence_metrics, get_debug_info
-from app.utils.confidence import determine_grounding, compute_confidence
+from app.utils.confidence import evaluate_evidence_structure, determine_grounding, compute_confidence
 
 
 app = FastAPI(
@@ -57,8 +57,6 @@ def query_endpoint(request: QueryRequest, req: Request):
     synthesizer = req.app.state.synthesizer
     
     pipeline_status = "success"
-    evidence_structure = "absent"
-    grounding_quality = "not_applicable"
 
     #
     # --- Zero-shot classification of scope---
@@ -67,9 +65,7 @@ def query_endpoint(request: QueryRequest, req: Request):
         pipeline_status = "out_of_scope"
         limitations = ["The question cannot be answered from the available sources."]
         meta = {"scope_decision": "out_of_scope"}
-        score, label, explanation = compute_confidence(pipeline_status, evidence_structure, grounding_quality)
-        confidence = Confidence(score=score, label=label, explanation=explanation)
-        return build_response(request.question, pipeline_status, evidence_structure, grounding_quality, limitations, meta=meta, confidence=confidence)
+        return build_response(request.question, pipeline_status, limitations, meta=meta)
 
     #
     # --- Retrieval ---
@@ -84,55 +80,56 @@ def query_endpoint(request: QueryRequest, req: Request):
         pipeline_status = "retrieval_failed"
         limitations = ["No documents could be retrieved for this question."]
         meta={"top_k": request.top_k_faiss + request.top_k_bm25, "chunks_retrieved": 0}
-        score, label, explanation = compute_confidence(pipeline_status, evidence_structure, grounding_quality)
-        confidence = Confidence(score=score, label=label, explanation=explanation)
-        return build_response(request.question, pipeline_status, evidence_structure, grounding_quality, limitations, meta=meta, confidence=confidence)
+        return build_response(request.question, pipeline_status, limitations, meta=meta)
 
     #
     # --- Reranking & Profiling ---
     #
     t1 = time.perf_counter()
-    profile = relevance_profiler.rerank_and_profile(request.question, retrieved_chunks)
+    reranked_chunks = relevance_profiler.rerank(request.question, retrieved_chunks)
     profiling_time = time.perf_counter() - t1
 
-    evidence_structure = profile["evidence_label"]
-    
-    if evidence_structure == "absent":
+    evidence_score, evidence_flags, evidence_meta = evaluate_evidence_structure(reranked_chunks)
+
+    if evidence_flags['absent']:  
         limitations=["The literature retrieved is topically related, but does not address this question directly."]
         meta={
                 "chunks_requested": request.top_k_faiss + request.top_k_bm25,
                 "chunks_retrieved": len(retrieved_chunks),
-                "relevance_metrics": profile["metrics"]
+                "evidence_metrics": evidence_meta
             }
-        score, label, explanation = compute_confidence(pipeline_status, evidence_structure, grounding_quality)
-        confidence = Confidence(score=score, label=label, explanation=explanation)
-        return build_response(request.question, pipeline_status, evidence_structure, grounding_quality, limitations, meta=meta, confidence=confidence)
+        confidence = Confidence(structure_score=evidence_score, grounding_score=None, region_label="Not_applicable", 
+                                explanation="Grounding score is absent because synthesis was not performed")
+        return build_response(request.question, pipeline_status, limitations, meta=meta, confidence=confidence)
         
-    elif evidence_structure == "isolated":
+    elif evidence_flags['isolated']:
+        strong_hits = evidence_meta["strong_hit_chunks"]
+        for chunk in strong_hits:
+            tmp_metadata = metadata.loc[chunk["paper_id"]]
+            chunk['title'] = str(tmp_metadata['title'])
+            chunk['authors'] = str(tmp_metadata['authors'])
+            chunk['year'] = int(tmp_metadata['year'])
+            chunk['journal'] = str(tmp_metadata['journal'])
+        
         limitations=["The retrieved evidence is too narrow and context-specific to support synthesis across studies."]
         meta={
                 "chunks_requested": request.top_k_faiss + request.top_k_bm25,
                 "chunks_retrieved": len(retrieved_chunks),
-                "relevance_metrics": profile["metrics"]
+                "evidence_metrics": evidence_meta.pop("strong_hit_chunks")
             }
-        score, label, explanation = compute_confidence(pipeline_status, evidence_structure, grounding_quality)
-        confidence = Confidence(score=score, label=label, explanation=explanation)
+        debug={"chunks": strong_hits}
+        confidence = Confidence(structure_score=evidence_score, grounding_score=None, region_label="Not_applicable", 
+                                explanation="Grounding score is absent because synthesis was not performed")
+        return build_response(request.question, pipeline_status, limitations, meta=meta, confidence=confidence, debug=debug)          
 
-        strong_hit = relevance_profiler.get_strong_hits(profile["ranked_chunks"])
-        sh_metadata = metadata.loc[strong_hit["paper_id"]]
-        strong_hit['title'] = str(sh_metadata['title'])
-        strong_hit['authors'] = str(sh_metadata['authors'])
-        strong_hit['year'] = int(sh_metadata['year'])
-        strong_hit['journal'] = str(sh_metadata['journal'])
-        debug = {"chunks": strong_hit}
-        return build_response(request.question, pipeline_status, evidence_structure, grounding_quality, limitations, meta=meta, confidence=confidence, debug=debug)            
+    ### RETRY FOR MONO_SOURCE_STRONG & LOW DENSITY here 
 
     #
     # --- Synthesis ---
     #    
 
     top_N = 15
-    relevant_chunks = profile["ranked_chunks"][:top_N]
+    relevant_chunks = reranked_chunks[:top_N]
 
     for c in relevant_chunks:
         c_metadata = metadata.loc[c["paper_id"]]
@@ -182,11 +179,11 @@ def query_endpoint(request: QueryRequest, req: Request):
             meta={
                 "chunks_requested": request.top_k_faiss + request.top_k_bm25,
                 "chunks_retrieved": len(retrieved_chunks),
-                "relevance_metrics": profile["metrics"]
+                "relevance_metrics": evidence_meta
             }
-            score, label, explanation = compute_confidence(pipeline_status, evidence_structure, grounding_quality)
-            confidence = Confidence(score=score, label=label, explanation=explanation)
-            return build_response(request.question, pipeline_status, evidence_structure, grounding_quality, limitations, meta=meta, confidence=confidence)
+            confidence = Confidence(structure_score=evidence_score, grounding_score=None, region_label="Not_applicable", 
+                                explanation="Grounding score is absent because the synthesizer abstained from synthesis.")
+            return build_response(request.question, pipeline_status, limitations, meta=meta, confidence=confidence)   
 
         ## Evidence metrics
         sentence_papers = extract_sentence_paper_ids(synthesis_output["answer"], source_lookup)
@@ -238,9 +235,9 @@ def query_endpoint(request: QueryRequest, req: Request):
             "generation_error": True,
             "last_error": str(last_error) if last_error else None
         }
-        score, label, explanation = compute_confidence(pipeline_status, evidence_structure, grounding_quality)
-        confidence = Confidence(score=score, label=label, explanation=explanation)
-        return build_response(request.question, pipeline_status, evidence_structure, grounding_quality, limitations, meta=meta, confidence=confidence)
+        confidence = Confidence(structure_score=evidence_score, grounding_score=None, region_label="Not_applicable", 
+                                explanation="Grounding score is absent because the synthesis generation failed.")
+        return build_response(request.question, pipeline_status, limitations, meta=meta, confidence=confidence)  
 
     synthesis_time = time.perf_counter() - t2
     total_time = time.perf_counter() - start_time
