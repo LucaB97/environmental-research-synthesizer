@@ -49,31 +49,22 @@ class Source(BaseModel):
     )
 
 
-class Confidence(BaseModel):
-    structure_score: float = Field(
-        ge=0.0,
-        le=1.0,
-        description="Evidence structure strength"
+
+class AxisProfile(BaseModel):
+    level: Literal["Strong", "Moderate", "Weak"]
+    score: float = Field(ge=0.0, le=1.0)
+    explanation: List[str]
+
+
+class ConfidenceProfile(BaseModel):
+    evidence: AxisProfile = Field(description="Evidence structure strength")
+    grounding: AxisProfile = Field(description="Grounding quality of the synthesis")
+    status: Literal["Success", "Not applicable"]
+    reason: Optional[str] = Field(
+        default="",
+        description="Reason for \"Not applicable\" status"
     )
-    grounding_score: float = Field(
-        ge=0.0,
-        le=1.0,
-        description="Grounding quality of the synthesis"
-    )
-    region_label: Literal[
-        "Strong Support",
-        "Moderate Support",
-        "Limited but Careful",
-        "Strong Evidence, Weak Integration",
-        "Low Support",
-        "Not applicable"
-    ] = Field(
-        description="Qualitative interpretation of the 2D epistemic state"
-    )
-    explanation: List[str] = Field(
-        ...,
-        description="Concise messages explaining the confidence assessment"
-    )
+
 
 
 class QueryResponse(BaseModel):
@@ -110,7 +101,7 @@ class QueryResponse(BaseModel):
         description="Evidence quality metrics; None if synthesis failed"
     )
     
-    confidence: Optional[Confidence] = Field(
+    confidence: Optional[ConfidenceProfile] = Field(
         default=None,
         description="Overall confidence in the synthesized answer; None if pipeline failed"
     )
