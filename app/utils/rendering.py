@@ -6,22 +6,98 @@ from utils.citations import CitationStyle
 
 ###Confidence profile
 
-def render_confidence_profile(confidence): 
-    st.subheader("Confidence Profile") 
-    evidence = confidence["evidence"] 
-    grounding = confidence["grounding"] 
-    col1, col2 = st.columns(2, gap="large") 
-    with col1: 
-        st.metric("Evidence structure", f"{evidence['score']:.2f}", evidence['level']) 
-        with st.expander("Why this score?"): 
-            for bullet in evidence["explanation"]: 
-                st.markdown(f"- {bullet}") 
-                
-    with col2: 
-        st.metric("Grounding quality", f"{grounding['score']:.2f}", grounding['level']) 
-        with st.expander("Why this score?"): 
-            for bullet in grounding["explanation"]: 
-                st.markdown(f"- {bullet}")
+def render_confidence_profile(confidence):
+
+    st.subheader("Confidence Profile")
+    st.caption(
+        "The Confidence Profile evaluates (1) the strength and distribution of retrieved evidence "
+        "and (2) how well the answer integrates and balances the cited sources. "
+        "It does not assess factual correctness."
+    )
+    
+    evidence = confidence["evidence"]
+    grounding = confidence["grounding"]
+
+    level_colors = {
+        "Strong": "#007acc",      # calm blue
+        "Moderate": "#a17fcf",    # soft purple
+        "Weak": "#888888",        # neutral gray
+        "Not_applicable": "#aaaaaa"
+    }
+
+    st.markdown("""
+    <style>
+    .confidence-metric {
+        margin-bottom: 1.2rem;
+    }
+
+    .metric-label {
+        font-size: 0.875rem;
+        margin-bottom: 0.2rem;
+    }
+
+    .metric-value {
+        font-size: 2.1rem;
+        font-weight: 600;
+        line-height: 1.1;
+        margin: 0;
+    }
+
+    .confidence-level {
+        font-size: 0.95rem;
+        font-weight: 600;
+        margin-top: 0.25rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2, gap="large")
+
+    # ---- Evidence ----
+    with col1:
+        st.markdown(f"""
+        <div class="confidence-metric">
+            <div class="metric-label">Evidence structure</div>
+            <div class="metric-value">{evidence['score']:.2f}</div>
+            <div class="confidence-level"
+                 style="color:{level_colors[evidence['level']]}">
+                 {evidence['level']}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.expander("Why this score?"):
+            if evidence["explanation"]["weaknesses"]:
+                st.markdown("**Weaknesses:**")
+                for bullet in evidence["explanation"]["weaknesses"]:
+                    st.markdown(f"- {bullet}")
+            if evidence["explanation"]["strengths"]:
+                st.markdown("**Strengths:**")
+                for bullet in evidence["explanation"]["strengths"]:
+                    st.markdown(f"- {bullet}")
+
+    # ---- Grounding ----
+    with col2:
+        st.markdown(f"""
+        <div class="confidence-metric">
+            <div class="metric-label">Grounding quality</div>
+            <div class="metric-value">{grounding['score']:.2f}</div>
+            <div class="confidence-level"
+                 style="color:{level_colors[grounding['level']]}">
+                 {grounding['level']}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.expander("Why this score?"):
+            if grounding["explanation"]["weaknesses"]:
+                st.markdown("**Weaknesses:**")
+                for bullet in grounding["explanation"]["weaknesses"]:
+                    st.markdown(f"- {bullet}")
+            if grounding["explanation"]["strengths"]:
+                st.markdown("**Strengths:**")
+                for bullet in grounding["explanation"]["strengths"]:
+                    st.markdown(f"- {bullet}")
 
 
 ###Citations

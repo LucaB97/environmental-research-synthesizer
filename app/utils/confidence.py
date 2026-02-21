@@ -138,59 +138,48 @@ def evaluate_evidence_structure(chunks, floor=0.25):
 
 def explain_evidence(flags, max_items=3):
     """
-    Generate concise, severity-aware explanations for evidence structure.
-
-    - Strength signals are ordered from simple → sophisticated.
-    - Max 3 bullets by default.
-    - If a critical weakness exists, limit strength signals to 1.
+    Generate severity-aware explanations for evidence structure,
+    returning separate lists for weaknesses and strengths.
     """
+    explanations = {
+        "weaknesses": [],
+        "strengths": []
+    }
 
-    explanations = []
-
-    # --- Critical states (short-circuit) ---
+    # --- Critical states ---
     if flags.get("absent"):
-        return ["No sufficiently relevant sources were identified."]
+        explanations["weaknesses"].append("No sufficiently relevant sources were identified.")
+        return explanations
 
     if flags.get("isolated"):
-        return ["Support relies on a single highly prominent passage."]
+        explanations["weaknesses"].append("Support relies on a single highly prominent passage.")
+        return explanations
 
-    # --- Weakness signals ---
-    weaknesses = []
-
+    # --- Weaknesses ---
     if flags.get("single_source_dominance"):
-        weaknesses.append("Strong support is concentrated in one source.")
+        explanations["weaknesses"].append("Strong support is concentrated in one source.")
 
     if flags.get("low_diversity"):
-        weaknesses.append("Few independent sources contribute strong support.")
+        explanations["weaknesses"].append("Few independent sources contribute strong support.")
 
     if flags.get("low_density"):
-        weaknesses.append("Only a limited number of highly relevant passages were found.")
+        explanations["weaknesses"].append("Only a limited number of highly relevant passages were found.")
 
-    # --- Strength signals (simple → sophisticated) ---
-    strengths = []
-
+    # --- Strengths ---
     if flags.get("high_density"):
-        strengths.append("Numerous highly relevant passages reinforce the claim.")
+        explanations["strengths"].append("Numerous highly relevant passages reinforce the claim.")
 
     if flags.get("multiple_strong_sources"):
-        strengths.append("Multiple independent sources strongly support the claim.")
+        explanations["strengths"].append("Multiple independent sources strongly support the claim.")
 
     if flags.get("well_balanced"):
-        strengths.append("Support is well distributed across sources.")
+        explanations["strengths"].append("Support is well distributed across sources.")
 
-    # --- Apply reduction rule ---
-    if weaknesses:
-        # Show weaknesses first
-        explanations.extend(weaknesses[:1])
+    # --- Optional: limit items ---
+    explanations["weaknesses"] = explanations["weaknesses"][:max_items]
+    explanations["strengths"] = explanations["strengths"][:max_items]
 
-        # If weakness exists, allow at most 1 strength signal
-        if strengths:
-            explanations.append(strengths[0])
-    else:
-        # No weaknesses → allow up to max_items strength signals
-        explanations.extend(strengths[:max_items])
-
-    return explanations[:max_items]
+    return explanations
 
 
 
@@ -247,7 +236,7 @@ def evaluate_grounding_quality(metrics):
         base = 0.35
 
     dominance_penalty = max(0, dominance - 0.5) * 0.5
-    corroboration_bonus = multi_ratio * 0.35
+    corroboration_bonus = multi_ratio * 0.4
 
     score = base + corroboration_bonus - dominance_penalty
     score = max(0.0, min(1.0, score))
@@ -265,49 +254,44 @@ def explain_grounding(flags, max_items=3):
     - If critical weakness exists, limit strength signals to 1.
     """
 
-    explanations = []
+    explanations = {
+        "weaknesses": [],
+        "strengths": []
+    }
 
     # --- Critical ---
     if flags.get("no_citations"):
-        return ["The answer does not cite supporting sources."]
-
+        explanations["weaknesses"].append("The answer does not cite supporting sources.")
+        return explanations
+    
     # --- Weaknesses (ordered by severity) ---
-    weaknesses = []
-
     if flags.get("no_corroboration"):
-        weaknesses.append("Claims are not corroborated across multiple sources.")
+        explanations["weaknesses"].append("Claims are not corroborated across multiple sources.")
 
     elif flags.get("low_corroboration"):
-        weaknesses.append("Only limited cross-source corroboration is present.")
+        explanations["weaknesses"].append("Only limited cross-source corroboration is present.")
 
     if flags.get("high_source_dominance"):
-        weaknesses.append("Most citations come from one dominant source.")
+        explanations["weaknesses"].append("Most citations come from one dominant source.")
 
     if flags.get("single_source_reliance"):
-        weaknesses.append("The answer relies primarily on a single source.")
+        explanations["weaknesses"].append("The answer relies primarily on a single source.")
 
     # --- Strengths (simple → sophisticated) ---
-    strengths = []
-
     if flags.get("multi_source_grounding"):
-        strengths.append("The answer integrates multiple independent sources.")
+        explanations["strengths"].append("The answer integrates multiple independent sources.")
 
     if flags.get("balanced_source_usage"):
-        strengths.append("Citations are distributed across sources.")
+        explanations["strengths"].append("Citations are distributed across sources.")
 
     if flags.get("cross_source_corroboration"):
-        strengths.append("Several claims are supported by multiple sources.")
+        explanations["strengths"].append("Several claims are supported by multiple sources.")
 
-    # --- Apply reduction rule ---
-    if weaknesses:
-        explanations.extend(weaknesses[:1])
+    # --- Optional: limit items ---
+    explanations["weaknesses"] = explanations["weaknesses"][:max_items]
+    explanations["strengths"] = explanations["strengths"][:max_items]
 
-        if strengths:
-            explanations.append(strengths[0])
-    else:
-        explanations.extend(strengths[:max_items])
-
-    return explanations[:max_items]
+    return explanations
 
 
 

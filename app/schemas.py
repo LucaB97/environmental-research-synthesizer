@@ -53,7 +53,7 @@ class Source(BaseModel):
 class AxisProfile(BaseModel):
     level: Literal["Strong", "Moderate", "Weak", "Not_applicable"]
     score: Optional[float] = Field(ge=0.0, le=1.0)
-    explanation: List[str] = Field(default_factory=list)
+    explanation: Dict = Field(default_factory=dict)
 
 
 class ConfidenceProfile(BaseModel):
