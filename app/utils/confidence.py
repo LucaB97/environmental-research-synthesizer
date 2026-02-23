@@ -104,35 +104,33 @@ def evaluate_evidence_structure(chunks, floor=0.25):
 
     if flags['absent']:
         metrics = {
-            "mean_score": mean,
-            "std": std,
-            "max_score": max_score
+            "mean_score": round(mean,2),
+            "std_score": round(std,2),
+            "max_score": round(max_score,2),
         }
 
     elif flags['isolated']:
         metrics = {
-            "mean_score": mean,
-            "std": std,
-            "max_score": max_score,
+            "mean_score": round(mean,2),
+            "std_score": round(std,2),
+            "max_score": round(max_score,2),
             "strong_hits": strong_hits,
-            "strong_hit_chunks": [chunks[strong_indices]]
         }
 
     else:
         metrics = {
-        "mean_score": mean,
-        "std": std,
-        "max_score": max_score,
+        "mean_score": round(mean,2),
+        "std_score": round(std,2),
+        "max_score": round(max_score,2),
         "strong_hits": strong_hits,
         "moderate_hits": moderate_hits,
         "distinct_strong_sources": distinct_strong_sources,
-        "dominance_ratio": dominance_ratio,
-        "density_score": density_score,
-        "diversity_score": diversity_score,
-        "balance_score": balance_score
+        "dominance_ratio": round(dominance_ratio,2),
     }
 
-    return structure_score, flags, metrics 
+    strong_hit_chunks = [chunks[i] for i in strong_indices]
+
+    return structure_score, flags, metrics, strong_hit_chunks
     
 
 
@@ -229,14 +227,14 @@ def evaluate_grounding_quality(metrics):
 
     # Base score from source count
     if used_papers >= 3:
-        base = 0.6
+        base = 0.65
     elif used_papers == 2:
-        base = 0.5
+        base = 0.40
     else:
         base = 0.35
 
     dominance_penalty = max(0, dominance - 0.5) * 0.5
-    corroboration_bonus = multi_ratio * 0.4
+    corroboration_bonus = multi_ratio * 0.35
 
     score = base + corroboration_bonus - dominance_penalty
     score = max(0.0, min(1.0, score))

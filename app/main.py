@@ -97,7 +97,7 @@ def query_endpoint(request: QueryRequest, req: Request):
     reranked_chunks = relevance_profiler.rerank(query, retrieved_chunks)
     profiling_time = time.perf_counter() - t1
 
-    evidence_score, evidence_flags, evidence_meta = evaluate_evidence_structure(reranked_chunks)
+    evidence_score, evidence_flags, evidence_meta, strong_chunks = evaluate_evidence_structure(reranked_chunks)
 
     #
     # --- Retrieval retry ---
@@ -128,7 +128,7 @@ def query_endpoint(request: QueryRequest, req: Request):
         reranked_chunks = relevance_profiler.rerank(query, retrieved_chunks)
         profiling_time += time.perf_counter() - t1
 
-        evidence_score, evidence_flags, evidence_meta = evaluate_evidence_structure(reranked_chunks)
+        evidence_score, evidence_flags, evidence_meta, strong_chunks = evaluate_evidence_structure(reranked_chunks)
 
     #
     # --- Early returns ---
@@ -148,8 +148,7 @@ def query_endpoint(request: QueryRequest, req: Request):
         return build_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile, debug=debug)
         
 
-    strong_hits = evidence_meta["strong_hit_chunks"]
-    for chunk in strong_hits:
+    for chunk in strong_chunks:
         tmp_metadata = metadata.loc[chunk["paper_id"]]
         chunk['title'] = str(tmp_metadata['title'])
         chunk['authors'] = str(tmp_metadata['authors'])
@@ -169,7 +168,7 @@ def query_endpoint(request: QueryRequest, req: Request):
                                                          reason="Grounding score is absent because synthesis was not performed")
         
         debug={
-            "relevant_passages": strong_hits,
+            "relevant_passages": strong_chunks,
             "expanded_query": expanded_query
             }
         return build_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile, debug=debug)          
@@ -200,7 +199,7 @@ def query_endpoint(request: QueryRequest, req: Request):
     synthesis_output = None
     best_output, best_score = None, -1
     last_error = None
-    retry_triggers = set()
+    retry_triggers = []
 
     prompt = TASK_HEADER + CORE_SYNTHESIS_INSTRUCTIONS
 
@@ -234,7 +233,7 @@ def query_endpoint(request: QueryRequest, req: Request):
             confidence_profile = evaluate_confidence_profile(pipeline_status, evidence_score, evidence_flags, 
                                                              reason="Grounding score is absent because the synthesizer abstained from synthesis")
             debug={
-            "relevant_passages": strong_hits,
+            "relevant_passages": strong_chunks,
             "expanded_query": expanded_query
             }
             return build_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile, debug=debug)   
@@ -266,7 +265,7 @@ def query_endpoint(request: QueryRequest, req: Request):
         # --- Retry decision ---
         if grounding_score < 0.5:
             retry_reason = determine_retry_reason(metrics, evidence_meta["distinct_strong_sources"])
-            retry_triggers.add(retry_reason) 
+            retry_triggers.append(retry_reason) 
         else:
             retry_reason = None             
 
@@ -327,8 +326,8 @@ def query_endpoint(request: QueryRequest, req: Request):
             "total_time_sec": round(total_time, 3),
             "synthesis_retry": {
                 "attempted": attempt>1,
-                "num_attempts": attempt,
-                "trigger": list(retry_triggers)
+                "total_attempts": attempt,
+                "retry_trigger": retry_triggers
             }
         },
         evidence_metrics=best_metrics,
