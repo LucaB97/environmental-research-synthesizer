@@ -3,7 +3,7 @@ import streamlit as st
 import requests
 
 from utils.citations import CitationStyle
-from utils.UI_rendering import render_confidence_profile, render_sentence_with_inline_citations, show_limitations, show_metadata
+from utils.UI_rendering import render_confidence_profile, render_sentence_with_inline_citations, show_limitations, show_metadata, show_sources, show_trace
 from utils.export import export_output
 # ---------------------------------------------------------------------
 # Page config
@@ -137,46 +137,25 @@ if data:
         if pipeline_status != "success":
             show_limitations(data, level="error")
             show_metadata(data)
+            show_trace(data)
             st.stop()
         
         # ---------------------------------------------------------------------
-        # Evidence handling
+        # Other early returns
         # ---------------------------------------------------------------------
         confidence = data["confidence"]
 
         if confidence["status"] == "Not applicable":
             show_limitations(data, level="warning")
             show_metadata(data)
+            show_trace(data)
             st.stop()
-
-        # evidence_structure = data.get("evidence_structure", "")
-
-        # if evidence_structure == "absent" or evidence_structure == "isolated":
-            
-
-        #     debug = data.get("debug")
-        #     with st.sidebar:
-        #         show_debug = st.checkbox("Show relevant evidence", value=False)
-            
-        #     if show_debug and debug:
-        #         chunks = debug.get("chunks", [])
-        #         if chunks:
-        #             st.markdown("<br>", unsafe_allow_html=True)
-        #             for chunk in chunks:
-        #                 st.markdown("---")
-        #                 st.markdown(f"**📄 {chunk['title']}**")
-        #                 st.caption(f"{chunk['authors']} ({chunk['year']})")
-        #                 st.text_area("Excerpt", chunk['text'], height=120)
-        #         else:
-        #             st.info("No information available.")
-        #     st.stop()
-
-
-        render_confidence_profile(confidence)
 
         # ---------------------------------------------------------------------
         # Synthesized answer (inline citations)
         # ---------------------------------------------------------------------
+        render_confidence_profile(confidence)
+        
         citation_style = CitationStyle.NUMERIC
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -191,8 +170,7 @@ if data:
         if data.get("limitations"):
             st.markdown("<br>", unsafe_allow_html=True)
             st.subheader("Limitations")
-            for lim in data["limitations"]:
-                st.write(f"{lim}")
+            show_limitations(data)
 
         # ---------------------------------------------------------------------
         # Sources (paper-level bibliography)
@@ -200,36 +178,22 @@ if data:
         if data.get("sources"):
             st.markdown("<br>", unsafe_allow_html=True)
             st.subheader("Sources")
-
-            for src in data["sources"]:
-                authors = src["authors"]
-                year = src["year"]
-                title = src["title"]
-                journal = f" — {src['journal']}" if src.get("journal") else ""
-
-                if citation_style == CitationStyle.NUMERIC:
-                    number = src.get("citation_number")
-                    prefix = f"[{number}] " if number is not None else ""
-                else:
-                    prefix = ""
-
-                st.markdown(
-                    f"<div style='margin-bottom:16px;'>"
-                    f"<small>{prefix}{authors} ({year}){journal}</small><br>"
-                    f"<strong>{title}</strong>"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
-
+            show_sources(data, citation_style)
+            
         # ---------------------------------------------------------------------
         # Metadata
         # ---------------------------------------------------------------------
-        st.markdown("<br>", unsafe_allow_html=True)
-        with st.expander("Metadata", expanded=False):
-            st.json(data.get("meta", {}))
+        show_metadata(data)
 
         # ---------------------------------------------------------------------
-        # 📊 Evidence Metrics
+        # Evidence Metrics
+        # ---------------------------------------------------------------------
+        if data.get("evidence_structure", {}):
+            with st.expander("Evidence distribution", expanded=False):
+                st.json(data.get("evidence_structure", {}))            
+
+        # ---------------------------------------------------------------------
+        # Grounding Metrics
         # ---------------------------------------------------------------------
         metrics = data.get("grounding_metrics")
 
@@ -252,7 +216,7 @@ if data:
 
                     with col2:
                         st.metric("Available papers", metrics.get('available_papers', 0))
-                        st.metric("Unique papers used", metrics.get('used_papers', 0))
+                        st.metric("Used papers", metrics.get('used_papers', 0))
                         st.metric("Paper dominance", metrics.get('paper_dominance', 0))
 
                     with col3:
@@ -268,69 +232,7 @@ if data:
         # ---------------------------------------------------------------------
         # Debug panel (sidebar-controlled)
         # ---------------------------------------------------------------------
-        debug = data.get("debug")
-
-        with st.sidebar:
-            show_debug = st.checkbox("Show debug panel", value=False)
-
-        if show_debug and debug:
-            chunks = debug.get("chunks", [])
-            papers = debug.get("papers", [])       
-
-            # =============================================================
-            # 📄 Evidence Trace
-            # =============================================================
-
-            if papers and chunks:
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.subheader("Evidence Trace")
-
-                for paper in papers:
-                    paper_id = paper["paper_id"]
-
-                    paper_chunks = [
-                        c for c in chunks
-                        if c["paper_id"] == paper_id
-                    ]
-
-                    used_chunks = [
-                        c for c in paper_chunks
-                        if c["used_in_synthesis"]
-                    ]
-
-                    # Paper header
-                    st.markdown(
-                        f"**📄 {paper['title']} ({paper['year']})**"
-                    )
-                    st.caption(
-                        f"{paper['authors']} · "
-                        f"Used {paper['chunks_used']} / "
-                        f"{paper['chunks_retrieved']} chunks"
-                    )
-
-                    # Chunk list
-                    for c in paper_chunks:
-                        is_used = c["used_in_synthesis"]
-
-                        indicator = "🟢" if is_used else "⚪"
-                        opacity = 1.0 if is_used else 0.6
-
-                        with st.expander(
-                            f"{indicator} "
-                            f"{c['chunk_id'].split('__')[-1]} "
-                            f"(rank #{c['rank']})",
-                            expanded=False
-                        ):
-                            st.markdown(
-                                f"<div style='opacity:{opacity}'>"
-                                f"{c['text']}"
-                                f"</div>",
-                                unsafe_allow_html=True
-                            )
-                
-            else:
-                st.info("No debug information available for this response.")
-
+        show_trace(data)
 
         st.markdown("---")
         st.subheader("Export")

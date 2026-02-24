@@ -1,10 +1,8 @@
-import matplotlib.pyplot as plt
 import streamlit as st
-
 from utils.citations import CitationStyle
 
 
-###Confidence profile
+### Confidence profile
 
 def render_confidence_profile(confidence):
 
@@ -100,7 +98,7 @@ def render_confidence_profile(confidence):
                     st.markdown(f"- {bullet}")
 
 
-###Citations
+### Citations
 
 def render_sentence_with_inline_citations(item, citation_style: CitationStyle):
     text = item["text"]
@@ -121,18 +119,20 @@ def render_sentence_with_inline_citations(item, citation_style: CitationStyle):
         return f"- {text}"
     
 
-###Limitations
+### Limitations
 
-def show_limitations(data, level="warning"):
+def show_limitations(data, level=None):
     limitations = data.get("limitations", [])
     for lim in limitations:
         if level == "error":
             st.error(lim)
-        else:
+        elif level == "warning":
             st.warning(lim)
+        else:
+            st.write(f"{lim}")
 
 
-###Metadata
+### Metadata
 
 def show_metadata(data):
     if data.get("meta", {}):
@@ -141,8 +141,98 @@ def show_metadata(data):
             st.json(data.get("meta", {}))
 
 
-### Debug
+### Sources
 
-def show_debug_info(data):
-    debug = data.get("debug")
+def show_sources(data, citation_style=CitationStyle.NUMERIC):
+    sources = data.get("sources")
     
+    for src in sources:
+        authors = src["authors"]
+        year = src["year"]
+        title = src["title"]
+        journal = f" — {src['journal']}" if src.get("journal") else ""
+
+        if citation_style == CitationStyle.NUMERIC:
+            number = src.get("citation_number")
+            prefix = f"[{number}] " if number is not None else ""
+        else:
+            prefix = ""
+
+        st.markdown(
+            f"<div style='margin-bottom:16px;'>"
+            f"<small>{prefix}{authors} ({year}){journal}</small><br>"
+            f"<strong>{title}</strong>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+### Trace
+
+def show_trace(data):
+    trace = data.get("trace")
+    
+    with st.sidebar:
+        show_trace = st.checkbox("Show diagnostics", value=False)
+    
+    if trace and show_trace:
+        st.markdown("---")
+        ## Query expansion
+        query_expansion = trace.get("query_expansion", None)
+        
+        if query_expansion:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.subheader("Query expansion")
+            st.markdown(query_expansion)
+        
+        ## Strong hit chunks
+        strong_hits = trace.get("strong_hit_chunks", None)
+        
+        if strong_hits:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.subheader(f"Strong hit chunks: {len(strong_hits)}")
+            for chunk in strong_hits:
+                with st.expander(f"From: **{chunk['title']}** ({chunk['year']})", expanded=False):
+                    st.markdown(f"{chunk['text']}")
+
+        ## Evidence usage
+        chunks = trace.get("chunks_provided_to_synthesizer", [])
+        papers = trace.get("paper_stats", [])   
+        
+        if papers and chunks:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.subheader("Evidence usage")
+
+            for paper in papers:
+                paper_id = paper["paper_id"]
+                paper_chunks = [
+                    c for c in chunks
+                    if c["paper_id"] == paper_id
+                ]
+
+                # Paper header
+                st.markdown(f"**📄 {paper['title']} ({paper['year']})**")
+                st.caption(
+                    f"{paper['authors']} · "
+                    f"Used {paper['chunks_used']} / "
+                    f"{paper['chunks_retrieved']} chunks"
+                )
+
+                # Chunk list
+                for c in paper_chunks:
+                    is_used = c["used_in_synthesis"]
+
+                    indicator = "🟢" if is_used else "⚪"
+                    opacity = 1.0 if is_used else 0.6
+
+                    with st.expander(
+                        f"{indicator} "
+                        f"{c['chunk_id'].split('__')[-1]} "
+                        f"(rank #{c['rank']})",
+                        expanded=False
+                    ):
+                        st.markdown(
+                            f"<div style='opacity:{opacity}'>"
+                            f"{c['text']}"
+                            f"</div>",
+                            unsafe_allow_html=True
+                        )
