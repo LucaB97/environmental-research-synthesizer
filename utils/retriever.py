@@ -1,5 +1,4 @@
 import faiss
-from collections import defaultdict
 
 from rank_bm25 import BM25Okapi
 import re
@@ -25,10 +24,6 @@ class SemanticRetriever:
         """
         Retrieve the most semantically similar chunks for a given query.
 
-        This method is recall-oriented: it may return multiple chunks
-        from the same document, which is useful when providing rich
-        context to an LLM.
-
         Args:
             query (str): Natural language query.
             top_k (int): Number of chunks to retrieve.
@@ -50,68 +45,6 @@ class SemanticRetriever:
             results.append(chunk)
 
         return results
-    
-
-    def display(self, results, max_chars=300):
-        """
-        Display retrieved chunks grouped by source paper, highlighting how many
-        relevant passages were found per paper.
-
-        This method improves interpretability of retrieval results by:
-        - Grouping multiple retrieved chunks originating from the same paper
-        - Displaying each paper only once in the main index
-        - Explicitly indicating how many relevant passages were retrieved per paper
-        - Printing the content of each relevant passage separately
-
-        Args:
-            results (list[dict]): List of retrieved chunks, where each chunk
-                contains at least the following fields:
-                - paper_id (str)
-                - authors (str)
-                - title (str)
-                - year (int)
-                - text (str)
-            max_chars (int, optional): Maximum number of characters to display
-                for each passage. Longer passages are truncated for readability.
-
-        Output format:
-            [1] Paper Title (Year) — N relevant passages
-            └ Passage 1:
-                <text snippet>
-
-            └ Passage 2:
-                <text snippet>
-
-        Notes:
-            This representation aligns with the retrieval logic used for synthesis,
-            making it explicit when multiple passages from the same source contribute
-            to the final answer. It also avoids misleading index jumps that can occur
-            when deduplication is applied without grouping.
-        """
-        
-        papers = defaultdict(list)
-
-        # Group chunks by paper
-        for r in results:
-            papers[r["paper_id"]].append(r)
-
-        display_idx = 1
-
-        for paper_id, chunks in papers.items():
-            authors = chunks[0]["authors"]
-            title = chunks[0]["title"]
-            year = chunks[0]["year"]
-            n_chunks = len(chunks)
-
-            print(f"\n[{display_idx}] {authors} ({year}) — {title}\n  ({n_chunks} relevant passage{'s' if n_chunks > 1 else ''})")
-
-            for i, c in enumerate(chunks, 1):
-                print(f"  └ Passage {i}:")
-                print("   ", c["text"][:max_chars] + ("..." if len(c["text"]) > max_chars else ""))
-                print()
-
-            display_idx += 1
-
 
 
 
@@ -147,15 +80,14 @@ class BM25Retriever:
     
 
 
-
 class HybridRetriever:
     def __init__(self, semantic_retriever, bm25_retriever):
-        self.semantic = semantic_retriever
-        self.bm25 = bm25_retriever
+        self.semantic_retriever = semantic_retriever
+        self.bm25_retriever = bm25_retriever
 
     def search(self, query, topk_faiss=30, topk_bm25=30):
-        faiss_results = self.semantic.search(query, topk_faiss)
-        bm25_results = self.bm25.search(query, topk_bm25)
+        faiss_results = self.semantic_retriever.search(query, topk_faiss)
+        bm25_results = self.bm25_retriever.search(query, topk_bm25)
 
         combined = {}
 

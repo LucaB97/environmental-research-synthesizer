@@ -59,8 +59,59 @@ def query_endpoint(request: QueryRequest, req: Request):
     query_expander = req.app.state.query_expander
     synthesizer = req.app.state.synthesizer
     
+    meta = {
+        "scope": {
+            "decision": "in_scope"
+        },
+        "retrieval": {
+            "retriever_info": {
+                "strategy": "hybrid",
+                "semantic": {
+                    "embedding_backend": type(retriever.semantic_retriever.embedding_fn).__name__,
+                    "embedding_model": getattr(retriever.semantic_retriever.embedding_fn, "model_name", None),
+                    "faiss_index_type": type(retriever.semantic_retriever.index).__name__,
+                    "chunks_requested": None,
+                },
+                "bm25": {
+                    "enabled": hasattr(retriever, "bm25_retriever"),
+                    "chunks_requested": None,
+                }
+            },
+            "query_expansion": {
+                "state": None,
+                "num_queries": None
+            },
+            "candidate_pool_size": None,
+            "retrieval_time_sec": None,
+        },
+        "profiling": {
+            "model": relevance_profiler.model_name,
+            "profiling_time_sec": None,
+        },
+        "errors": {
+            "generation_error": None,
+            "total_attempts": None,
+            "last_error": None
+        },
+        "synthesis": {
+            "synthesizer_info": {
+                "llm_type": type(synthesizer.llm).__name__,
+                "model": synthesizer.llm.model_name,
+                "max_tokens": synthesizer.llm.max_tokens,
+                "temperature": synthesizer.llm.temperature,
+            },
+            "synthesis_retry": {
+                "attempted": None,
+                "total_attempts": None,
+                "retry_triggers": None
+            },
+            "chunks_selected": None,
+            "synthesis_time_sec": None,
+            "total_time_sec": None
+        }
+    }
+    
     pipeline_status = "success"
-    retrieval_retry = False
 
     #
     # --- Zero-shot classification of scope---
@@ -70,7 +121,7 @@ def query_endpoint(request: QueryRequest, req: Request):
     if not scope_classifier.is_in_scope(query, SCOPE_CLASSIFIER_PROMPT):
         pipeline_status = "out_of_scope"
         limitations = ["The question cannot be answered from the available sources"]
-        meta = {"scope_decision": "out_of_scope"}
+        meta["scope"] = "out_of_scope"
         confidence_profile = evaluate_confidence_profile(pipeline_status, reason="Early termination because the question is out of scope")
         return build_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile)
 
@@ -78,16 +129,23 @@ def query_endpoint(request: QueryRequest, req: Request):
     # --- Retrieval ---
     #
     topk_faiss, topk_bm25 = request.topk_faiss, request.topk_bm25
+    query_expansion = False
     expanded_query = None
 
     t0 = time.perf_counter()
     retrieved_chunks = retriever.search(query, topk_faiss=topk_faiss, topk_bm25=topk_bm25)
     retrieval_time = time.perf_counter() - t0
     
+    meta["retrieval"]["retriever_info"]["semantic"]["chunks_requested"] = topk_faiss
+    meta["retrieval"]["retriever_info"]["bm25"]["chunks_requested"] = topk_bm25
+    meta["retrieval"]["candidate_pool_size"] = len(retrieved_chunks)
+    meta["retrieval"]["query_expansion"]["state"] = query_expansion
+    meta["retrieval"]["query_expansion"]["num_queries"] = 1
+    meta["retrieval"]["retrieval_time_sec"] = round(retrieval_time, 3)
+    
     if not retrieved_chunks:
         pipeline_status = "retrieval_failed"
         limitations = ["No documents could be retrieved for this question"]
-        meta={"topk": topk_faiss + topk_bm25, "chunks_retrieved": 0}
         confidence_profile = evaluate_confidence_profile(pipeline_status, reason="Early termination because no evidence was retrieved")
         return build_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile)
 
@@ -98,6 +156,8 @@ def query_endpoint(request: QueryRequest, req: Request):
     reranked_chunks = relevance_profiler.rerank(query, retrieved_chunks)
     profiling_time = time.perf_counter() - t1
 
+    meta["profiling"]["profiling_time_sec"] = round(profiling_time, 3)
+
     evidence_score, evidence_flags, evidence_meta, strong_chunks = evaluate_evidence_structure(reranked_chunks)
 
     #
@@ -105,10 +165,10 @@ def query_endpoint(request: QueryRequest, req: Request):
     #
     if evidence_flags['absent'] or evidence_flags['isolated'] or evidence_flags['low_density']:
         
-        retrieval_retry = True
         expanded_query = query_expander.produce_expansion(query, QUERY_EXPANDER_PROMPT)
         queries = [query, expanded_query]
-        # topk_faiss, topk_bm25 = int(1.5 * topk_faiss), int(1.5 * topk_bm25)  #no increase in topk for now
+        query_expansion = True
+
         retrieved_chunks = []
 
         t0 = time.perf_counter()
@@ -116,20 +176,25 @@ def query_endpoint(request: QueryRequest, req: Request):
             retrieved_chunks.extend(retriever.search(q, topk_faiss=topk_faiss, topk_bm25=topk_bm25))
         retrieval_time += time.perf_counter() - t0
         
+        retrieved_chunks = deduplicate(retrieved_chunks)
+
+        meta["retrieval"]["candidate_pool_size"] = len(retrieved_chunks)
+        meta["retrieval"]["query_expansion"]["state"] = query_expansion
+        meta["retrieval"]["query_expansion"]["num_queries"] = len(queries)
+        meta["retrieval"]["retrieval_time_sec"] = round(retrieval_time, 3)
+
         if not retrieved_chunks:
             pipeline_status = "retrieval_failed"
             limitations = ["No documents could be retrieved for this question"]
-            meta={"topk": topk_faiss + topk_bm25, "chunks_retrieved": 0, "retrieval_retry": retrieval_retry}
             confidence_profile = evaluate_confidence_profile(pipeline_status, reason="Early termination because no evidence was retrieved")
             trace={"query_expansion": expanded_query}
             return build_response(query, pipeline_status, limitations, meta=meta, 
                                   confidence=confidence_profile, trace=trace)
         
-        retrieved_chunks = deduplicate(retrieved_chunks)
-
         t1 = time.perf_counter()
         reranked_chunks = relevance_profiler.rerank(query, retrieved_chunks)
         profiling_time += time.perf_counter() - t1
+        meta["profiling"]["profiling_time_sec"] = round(profiling_time, 3)
 
         evidence_score, evidence_flags, evidence_meta, strong_chunks = evaluate_evidence_structure(reranked_chunks)
 
@@ -139,12 +204,6 @@ def query_endpoint(request: QueryRequest, req: Request):
 
     if evidence_flags['absent']:  
         limitations=["The literature retrieved is topically related, but does not address this question directly"]
-        meta={
-                "chunks_requested": topk_faiss + topk_bm25,
-                "chunks_retrieved": len(retrieved_chunks),
-                "retrieval_retry": retrieval_retry,
-                "evidence_metrics": evidence_meta
-            }
         confidence_profile = evaluate_confidence_profile(pipeline_status, evidence_score, evidence_flags, 
                                                          reason="Grounding score is absent because synthesis was not performed")
         trace={"query_expansion": expanded_query}
@@ -162,14 +221,8 @@ def query_endpoint(request: QueryRequest, req: Request):
 
     if evidence_flags['isolated']:        
         limitations=["The retrieved evidence is too narrow and context-specific to support synthesis across studies"]
-        meta={
-                "chunks_requested": request.topk_faiss + request.topk_bm25,
-                "chunks_retrieved": len(retrieved_chunks),
-                "retrieval_retry": retrieval_retry,
-            }
         confidence_profile = evaluate_confidence_profile(pipeline_status, evidence_score, evidence_flags, 
                                                          reason="Grounding score is absent because synthesis was not performed")
-        
         trace={
             "query_expansion": expanded_query,
             "strong_hit_chunks": strong_chunks            
@@ -182,6 +235,8 @@ def query_endpoint(request: QueryRequest, req: Request):
     #    
 
     top_N = 15
+    meta["synthesis"]["chunks_selected"] = top_N
+
     provided_chunks = reranked_chunks[:top_N]
 
     for c in provided_chunks:
@@ -223,20 +278,27 @@ def query_endpoint(request: QueryRequest, req: Request):
         answer = synthesis_output["answer"]
         
         if not answer:
+            synthesis_time = time.perf_counter() - t2
+            total_time = time.perf_counter() - start_time
+
             limitations = synthesis_output.get("limitations") or ["No meaningful answer could be produced from the available literature"]
-            meta={
-                "chunks_requested": request.topk_faiss + request.topk_bm25,
-                "chunks_retrieved": len(retrieved_chunks),
-                "retrieval_retry": retrieval_retry,
-            }
+
+            meta["synthesis"]["synthesis_time_sec"] = round(synthesis_time, 3)
+            meta["synthesis"]["total_time_sec"] = round(total_time, 3)
+
+            # if attempt > 1:
+            #     meta["synthesis"]["synthesis_retry"]["attempted"] = attempt>1
+            #     meta["synthesis"]["synthesis_retry"]["total_attempts"] = attempt
+            #     meta["synthesis"]["synthesis_retry"]["retry_triggers"] = retry_triggers
+
             confidence_profile = evaluate_confidence_profile(pipeline_status, evidence_score, evidence_flags, 
                                                              reason="Grounding score is absent because the synthesizer abstained from synthesis")
-            debug={
+            trace={
             "query_expansion": expanded_query,
             "strong_hit_chunks": strong_chunks
             }
             return build_response(query, pipeline_status, limitations, meta=meta, 
-                                  evidence_structure=evidence_meta, confidence=confidence_profile, debug=debug)   
+                                  evidence_structure=evidence_meta, confidence=confidence_profile, trace=trace)   
 
         ## Evidence metrics
         sentence_papers = extract_sentence_paper_ids(synthesis_output["answer"], source_lookup)
@@ -279,40 +341,29 @@ def query_endpoint(request: QueryRequest, req: Request):
         else:
             break  # synthesis accepted
 
-
+    synthesis_time = time.perf_counter() - t2
+    total_time = time.perf_counter() - start_time
+    meta["synthesis"]["synthesis_time_sec"] = round(synthesis_time, 3)
+    meta["synthesis"]["total_time_sec"] = round(total_time, 3)
+    
     # --- Failure fallback ---
     if last_error and not synthesis_output:
         pipeline_status = "generation_error"
         limitations=["The system was unable to generate a reliable answer this time. Please try again."]
-        meta={
-            "generation_error": True,
-            "last_error": str(last_error) if last_error else None
-        }
+        meta["errors"]["generation_error"] = True
+        meta["errors"]["total_attempts"] = synthesizer.max_attempts
+        meta["errors"]["last_error"] = last_error
         confidence_profile = evaluate_confidence_profile(pipeline_status, evidence_score, evidence_flags, 
                                                          reason="Grounding score is absent because the synthesis generation failed")
         return build_response(query, pipeline_status, limitations, meta=meta, 
                               evidence_structure=evidence_meta, confidence=confidence_profile)  
 
-    synthesis_time = time.perf_counter() - t2
-    total_time = time.perf_counter() - start_time
-
     #
     # --- Output preparation ---
     #
-    meta={
-        "chunks_requested": request.topk_faiss + request.topk_bm25,
-        "chunks_retrieved": len(retrieved_chunks),
-        "retrieval_retry": retrieval_retry,
-        "retrieval_time_sec": round(retrieval_time, 3),
-        "profiling_time_sec": round(profiling_time, 3),
-        "synthesis_time_sec": round(synthesis_time, 3),
-        "total_time_sec": round(total_time, 3),
-        "synthesis_retry": {
-            "attempted": attempt>1,
-            "total_attempts": attempt,
-            "retry_triggers": retry_triggers
-        }
-    }
+    meta["synthesis"]["synthesis_retry"]["attempted"] = attempt>1
+    meta["synthesis"]["synthesis_retry"]["total_attempts"] = attempt
+    meta["synthesis"]["synthesis_retry"]["retry_triggers"] = retry_triggers
 
     citation_index = build_citation_index(best_sentence_papers)
     sources = build_sources(citation_index, source_lookup)

@@ -166,6 +166,43 @@ def show_sources(data, citation_style=CitationStyle.NUMERIC):
             unsafe_allow_html=True
         )
 
+### Grounding metrics
+
+def show_grounding_metrics(data):
+    metrics = data.get("grounding_metrics")
+
+    if metrics is not None:
+        with st.expander("Grounding Metrics", expanded=False):
+            
+            if not metrics:
+                st.info("Grounding metrics are unavailable for this response.")
+            
+            else:
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.metric("Available chunks", metrics.get('available_chunks', 0))
+                    st.metric("Used chunks", metrics.get('used_chunks', 0))
+                    st.metric(
+                        "Chunk coverage",
+                        f"{metrics.get('chunk_coverage', 0):.0%}"
+                    )
+
+                with col2:
+                    st.metric("Available papers", metrics.get('available_papers', 0))
+                    st.metric("Used papers", metrics.get('used_papers', 0))
+                    st.metric("Paper dominance", metrics.get('paper_dominance', 0))
+
+                with col3:
+                    st.metric(
+                        "Avg citations / sentence",
+                        metrics.get('avg_citations_per_sentence', 0)
+                    )
+                    st.metric(
+                        "Multi-source sentences",
+                        f"{metrics.get('multi_source_sentence_ratio', 0):.0%}"
+                    )
+
 ### Trace
 
 def show_trace(data):

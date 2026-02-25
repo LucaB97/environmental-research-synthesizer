@@ -5,19 +5,19 @@ class BaseLLMClient:
 
 
 class OpenAIClient(BaseLLMClient):
-    def __init__(self, model="gpt-4o-mini", max_tokens=400, temperature=0.2):
+    def __init__(self, model_name="gpt-4o-mini", max_tokens=400, temperature=0.2):
         
         import os
         from openai import OpenAI
         
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.model = model
+        self.model_name = model_name
         self.max_tokens = max_tokens
         self.temperature = temperature
 
     def generate(self, prompt: str) -> str:
         response = self.client.chat.completions.create(
-            model=self.model,
+            model=self.model_name,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=self.max_tokens,
             temperature=self.temperature,
@@ -47,6 +47,7 @@ class HFClient(BaseLLMClient):
         import torch
         from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, AutoModelForCausalLM
 
+        self.model_name = model_name
         self.max_tokens = max_tokens
         self.temperature = temperature
 

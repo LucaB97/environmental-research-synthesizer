@@ -3,7 +3,7 @@ import streamlit as st
 import requests
 
 from utils.citations import CitationStyle
-from utils.UI_rendering import render_confidence_profile, render_sentence_with_inline_citations, show_limitations, show_metadata, show_sources, show_trace
+from utils.UI_rendering import render_confidence_profile, render_sentence_with_inline_citations, show_limitations, show_metadata, show_sources, show_grounding_metrics, show_trace
 from utils.export import export_output
 # ---------------------------------------------------------------------
 # Page config
@@ -33,7 +33,6 @@ st.markdown(
     "Ask an evidence-based research question. "
     "Answers are synthesized **only** from the underlying academic sources."
 )
-
 
 # ---------------------------------------------------------------------
 # Example queries
@@ -68,6 +67,7 @@ for i, ex in enumerate(row2):
             st.session_state['answer_placeholder'].empty()
 
 st.markdown('</div>', unsafe_allow_html=True)
+
 # ---------------------------------------------------------------------
 # Input
 # ---------------------------------------------------------------------
@@ -79,14 +79,6 @@ question = st.text_area(
     value=st.session_state['question'],
     placeholder="Write your question here…",
 )
-
-# top_k = st.slider(
-#     "Chunks to retrieve",
-#     min_value=10,
-#     max_value=30,
-#     value=20,
-#     step=5
-# )
 
 topk_faiss = 30
 topk_bm25 = 30
@@ -195,39 +187,7 @@ if data:
         # ---------------------------------------------------------------------
         # Grounding Metrics
         # ---------------------------------------------------------------------
-        metrics = data.get("grounding_metrics")
-
-        if metrics is not None:
-            with st.expander("Grounding Metrics", expanded=False):
-                
-                if not metrics:
-                    st.info("Grounding metrics are unavailable for this response.")
-                
-                else:
-                    col1, col2, col3 = st.columns(3)
-
-                    with col1:
-                        st.metric("Available chunks", metrics.get('available_chunks', 0))
-                        st.metric("Used chunks", metrics.get('used_chunks', 0))
-                        st.metric(
-                            "Chunk coverage",
-                            f"{metrics.get('chunk_coverage', 0):.0%}"
-                        )
-
-                    with col2:
-                        st.metric("Available papers", metrics.get('available_papers', 0))
-                        st.metric("Used papers", metrics.get('used_papers', 0))
-                        st.metric("Paper dominance", metrics.get('paper_dominance', 0))
-
-                    with col3:
-                        st.metric(
-                            "Avg citations / sentence",
-                            metrics.get('avg_citations_per_sentence', 0)
-                        )
-                        st.metric(
-                            "Multi-source sentences",
-                            f"{metrics.get('multi_source_sentence_ratio', 0):.0%}"
-                        )
+        show_grounding_metrics(data)
 
         # ---------------------------------------------------------------------
         # Debug panel (sidebar-controlled)

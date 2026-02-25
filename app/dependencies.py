@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from utils.embeddings import openai_embedding
+from utils.embeddings import OpenAIEmbedding, HFEmbedding
 from utils.indexing import load_faiss
 from utils.retriever import SemanticRetriever, BM25Retriever, HybridRetriever
 from utils.llm_clients import OpenAIClient, HFClient
@@ -29,7 +29,7 @@ def load_system(app, profile: Optional[str] = None):
         chunks = json.load(f)
 
     index = load_faiss(FAISS_PATH)
-    embedding_fn = openai_embedding
+    embedding_fn = OpenAIEmbedding()
     semantic_retriever = SemanticRetriever(index, chunks, embedding_fn)
     bm25_retriever = BM25Retriever(chunks)
 
@@ -53,7 +53,7 @@ def load_system(app, profile: Optional[str] = None):
     # ---- Core components ----
     scope_classifier = QueryScopeClassifier(llm)
     retriever = HybridRetriever(semantic_retriever, bm25_retriever)
-    relevance_profiler = RelevanceProfiler("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    relevance_profiler = RelevanceProfiler()
     query_expander = QueryExpander(llm)
     synthesizer = ResearchSynthesisEngine(llm, max_attempts=3)
 

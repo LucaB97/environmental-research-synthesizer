@@ -12,7 +12,8 @@ class RelevanceProfiler:
         floor (float): Minimum score to consider a chunk as relevant (floor safeguard)
     """
     
-    def __init__(self, model_name: str, floor: float = 0.25):
+    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2", floor: float = 0.25):
+        self.model_name = model_name
         self.encoder = CrossEncoder(model_name)
         self.floor = floor
 
