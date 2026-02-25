@@ -80,7 +80,7 @@ def evaluate_evidence_structure(chunks, floor=0.25):
     pure_moderate_hits = max(0, moderate_hits - strong_hits)
     effective_hits = strong_hits + 0.5 * pure_moderate_hits
 
-    density_score = min(effective_hits / 10.0, 1.0)
+    density_score = min(effective_hits / 15.0, 1.0)
     diversity_score = min(distinct_strong_sources / 3.0, 1.0)
     balance_score = 1.0 - dominance_ratio
 
@@ -95,11 +95,11 @@ def evaluate_evidence_structure(chunks, floor=0.25):
         "absent": max_score < floor,
         "isolated": strong_hits == 1 and max_z > 2,
         "single_source_dominance": strong_hits >= 5 and distinct_strong_sources == 1,
-        "low_density": effective_hits < 3,
-        "low_diversity": distinct_strong_sources < 2,
-        "multiple_strong_sources": strong_hits >= 3 and distinct_strong_sources >= 2,
-        "well_balanced": dominance_ratio < 0.6 and distinct_strong_sources >= 2,
-        "high_density": effective_hits >= 6,
+        "low_density": effective_hits < 5,
+        "low_diversity": distinct_strong_sources <= 2,
+        "multiple_strong_sources": strong_hits >= 3 and distinct_strong_sources > 2,
+        "well_balanced": dominance_ratio < 0.6 and distinct_strong_sources > 2,
+        "high_density": effective_hits >= 10,
     }
 
     if flags['absent']:
