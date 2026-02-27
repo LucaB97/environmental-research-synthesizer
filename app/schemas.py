@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Literal
+from typing import List, Dict, Optional, Literal, Union
 
 
 class QueryRequest(BaseModel):
@@ -53,7 +53,12 @@ class Source(BaseModel):
 class AxisProfile(BaseModel):
     level: Literal["Strong", "Moderate", "Weak", "Not_applicable"]
     score: Optional[float] = Field(ge=0.0, le=1.0)
-    explanation: Dict = Field(default_factory=dict)
+    explanation: Optional[
+        Union[
+            str,  # for semantic axis
+            Dict[str, List[str]]  # for evidence / grounding
+        ]
+    ] = None
 
 
 class ConfidenceProfile(BaseModel):

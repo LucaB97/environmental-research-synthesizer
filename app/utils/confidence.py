@@ -137,28 +137,20 @@ def explain_semantic(flags):
     """
     Generate severity-aware explanations for semantics alignment of evidence to query
     """
-    
-    explanations = {
-        "signals": []
-    }
 
     # --- Critical states ---
     if flags.get("weak_semantic_match"):
-        explanations["signals"].append("The literature does not address this question directly")
-        return explanations
+        return "Most retrieved passages are marginally related to the query"
 
     if flags.get("limited_semantic_match"):
-        explanations["signals"].append("Semantic alignment across retrieved passages is uneven")
-        return explanations
+        return "Some retrieved passages are relevant, but coverage of the query is inconsistent"
 
     # --- Positive / strengths ---
     if flags.get("moderate_semantic_match"):
-        explanations["signals"].append("Several retrieved passages are reasonably relevant to the query")
-        return explanations
+        return "Retrieved passages are generally relevant to the query"
     
-    explanations["signals"].append("Retrieved passages closely align with the query")
+    return "Retrieved passages closely align with the query"
 
-    return explanations
 
 
 def explain_evidence(flags, max_items=3):

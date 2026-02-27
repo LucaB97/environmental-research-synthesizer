@@ -4,35 +4,81 @@ from utils.citations import CitationStyle
 
 ### Confidence profile
 
+def format_explanation(expl):
+    """
+    Formats explanation for tooltip rendering.
+    Supports:
+      - None
+      - string (semantic axis)
+      - dict with 'strengths' and/or 'weaknesses'
+    """
+
+    if expl is None:
+        return "No notable signals."
+
+    # --- Case 1: simple string (semantic axis) ---
+    if isinstance(expl, str):
+        return expl
+
+    # --- Case 2: structured dictionary ---
+    if isinstance(expl, dict):
+        bullets = ""
+
+        weaknesses = expl.get("weaknesses", [])
+        strengths = expl.get("strengths", [])
+
+        if weaknesses:
+            bullets += "<b>Weaknesses:</b><ul>"
+            for w in weaknesses:
+                bullets += f"<li>{w}</li>"
+            bullets += "</ul>"
+
+        if strengths:
+            bullets += "<b>Strengths:</b><ul>"
+            for s in strengths:
+                bullets += f"<li>{s}</li>"
+            bullets += "</ul>"
+
+        if bullets == "":
+            return "No notable signals."
+
+        return bullets
+
+    # --- Fallback (unexpected type) ---
+    return "No notable signals."
+
+
 def render_confidence_profile(confidence):
 
     st.subheader("Confidence Profile")
-    st.caption(
-        "The Confidence Profile evaluates (1) the strength and distribution of retrieved evidence "
-        "and (2) how well the answer integrates and balances the cited sources. "
-        "It does not assess factual correctness."
-    )
-    
+
     semantic = confidence["semantic"]
     evidence = confidence["evidence"]
     grounding = confidence["grounding"]
 
     level_colors = {
-        "Strong": "#007acc",      # calm blue
-        "Moderate": "#a17fcf",    # soft purple
-        "Weak": "#888888",        # neutral gray
+        "Strong": "#007acc",
+        "Moderate": "#a17fcf",
+        "Weak": "#888888",
         "Not_applicable": "#aaaaaa"
     }
 
     st.markdown("""
     <style>
     .confidence-metric {
-        margin-bottom: 1.2rem;
+        margin-bottom: 1.5rem;
     }
 
     .metric-label {
-        font-size: 0.875rem;
+        font-size: 0.9rem;
         margin-bottom: 0.2rem;
+        font-weight: 600;
+    }
+
+    .metric-caption {
+        font-size: 0.75rem;
+        color: #666;
+        margin-bottom: 0.5rem;
     }
 
     .metric-value {
@@ -47,17 +93,69 @@ def render_confidence_profile(confidence):
         font-weight: 600;
         margin-top: 0.25rem;
     }
+
+    .tooltip {
+        position: relative;
+        display: inline-block;
+        cursor: pointer;
+        margin-left: 6px;
+        color: #999;
+        font-weight: 600;
+        font-size: 0.8rem;   /* <-- add this */
+        vertical-align: middle;  /* optional, improves alignment */
+    }
+
+    .tooltip .tooltiptext {
+        visibility: hidden;
+        width: 260px;
+        background-color: #f9f9f9;
+        color: #333;
+        text-align: left;
+        border-radius: 6px;
+        padding: 10px;
+        position: absolute;
+        z-index: 1;
+        top: 125%;
+        left: 50%;
+        margin-left: -130px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        font-size: 0.8rem;
+    }
+
+    .tooltip:hover .tooltiptext {
+        visibility: visible;
+    }
+
+    .tooltiptext ul {
+        padding-left: 18px;
+        margin: 0;
+    }
     </style>
     """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3, gap="large")
+    semantic_caption = "How closely the most relevant retrieved passages match the query"
+    evidence_caption = "How numerous and well-distributed are the most relevant passages"
+    grounding_caption = "How well the answer integrates and balances cited sources"
 
-    # ---- Evidence semantics----
+    # ---- Semantic alignment ----
     with col1:
+        semantic_tooltip = format_explanation(semantic["explanation"])
+
         st.markdown(f"""
         <div class="confidence-metric">
-            <div class="metric-label">Semantic alignment</div>
-            <div class="metric-value">{semantic['score']:.2f}</div>
+            <div class="metric-label">
+                Semantic alignment
+            </div>
+            <div class="metric-caption">
+                {semantic_caption}
+            </div>
+            <div class="metric-value">
+                {semantic['score']:.2f}
+                <span class="tooltip">ⓘ
+                    <span class="tooltiptext">{semantic_tooltip}</span>
+                </span>    
+            </div>
             <div class="confidence-level"
                  style="color:{level_colors[semantic['level']]}">
                  {semantic['level']}
@@ -65,17 +163,24 @@ def render_confidence_profile(confidence):
         </div>
         """, unsafe_allow_html=True)
 
-        with st.expander("Why this score?"):
-            if semantic["explanation"]:
-                for bullet in semantic["explanation"]:
-                    st.markdown(f"{bullet}")
-
-    # ---- Evidence distribution----
+    # ---- Evidence structure ----
     with col2:
+        evidence_tooltip = format_explanation(evidence["explanation"])
+
         st.markdown(f"""
         <div class="confidence-metric">
-            <div class="metric-label">Evidence structure</div>
-            <div class="metric-value">{evidence['score']:.2f}</div>
+            <div class="metric-label">
+                Evidence structure
+            </div>
+            <div class="metric-caption">
+                {evidence_caption}
+            </div>
+            <div class="metric-value">
+                {evidence['score']:.2f}
+                <span class="tooltip">ⓘ
+                    <span class="tooltiptext">{evidence_tooltip}</span>
+                </span>
+            </div>
             <div class="confidence-level"
                  style="color:{level_colors[evidence['level']]}">
                  {evidence['level']}
@@ -83,38 +188,30 @@ def render_confidence_profile(confidence):
         </div>
         """, unsafe_allow_html=True)
 
-        with st.expander("Why this score?"):
-            if evidence["explanation"]["weaknesses"]:
-                st.markdown("**Weaknesses:**")
-                for bullet in evidence["explanation"]["weaknesses"]:
-                    st.markdown(f"- {bullet}")
-            if evidence["explanation"]["strengths"]:
-                st.markdown("**Strengths:**")
-                for bullet in evidence["explanation"]["strengths"]:
-                    st.markdown(f"- {bullet}")
-
-    # ---- Grounding ----
+    # ---- Grounding quality ----
     with col3:
+        grounding_tooltip = format_explanation(grounding["explanation"])
+
         st.markdown(f"""
         <div class="confidence-metric">
-            <div class="metric-label">Grounding quality</div>
-            <div class="metric-value">{grounding['score']:.2f}</div>
+            <div class="metric-label">
+                Grounding quality
+            </div>
+            <div class="metric-caption">
+                {grounding_caption}                                    
+            </div>
+            <div class="metric-value">
+                {grounding['score']:.2f}
+                <span class="tooltip">ⓘ
+                    <span class="tooltiptext">{grounding_tooltip}</span>
+                </span>
+            </div>
             <div class="confidence-level"
                  style="color:{level_colors[grounding['level']]}">
                  {grounding['level']}
             </div>
         </div>
         """, unsafe_allow_html=True)
-
-        with st.expander("Why this score?"):
-            if grounding["explanation"]["weaknesses"]:
-                st.markdown("**Weaknesses:**")
-                for bullet in grounding["explanation"]["weaknesses"]:
-                    st.markdown(f"- {bullet}")
-            if grounding["explanation"]["strengths"]:
-                st.markdown("**Strengths:**")
-                for bullet in grounding["explanation"]["strengths"]:
-                    st.markdown(f"- {bullet}")
 
 
 ### Citations
