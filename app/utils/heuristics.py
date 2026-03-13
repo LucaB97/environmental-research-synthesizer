@@ -1,4 +1,4 @@
-def determine_retry_reason(metrics, distinct_hit_papers):
+def determine_retry_reason(metrics):
     """
     Determine whether post-synthesis regeneration (retry) is warranted
     based on structural imbalances in how retrieved evidence was used.
@@ -56,7 +56,7 @@ def determine_retry_reason(metrics, distinct_hit_papers):
     # -----------------------------------------
     # 1. Source dominance despite diversity
     # -----------------------------------------
-    if (distinct_hit_papers >= 3 and metrics["paper_dominance"] > 0.75):
+    if (metrics["available_papers"] > 3 and metrics["paper_dominance"] > 0.75):
         failures["source_dominance"] = metrics["paper_dominance"]
 
     # -----------------------------------------
@@ -69,7 +69,7 @@ def determine_retry_reason(metrics, distinct_hit_papers):
     # 3. No cross-source use despite diversity
     # -----------------------------------------
     if (
-        distinct_hit_papers >= 3
+        metrics["available_papers"] > 3
         and metrics["multi_source_sentence_ratio"] == 0
         and metrics["used_papers"] >= 3
     ):

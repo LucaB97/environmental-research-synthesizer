@@ -193,6 +193,50 @@ def explain_semantic(semantic_alignment):
 
 #     return evidence_structure, flags, metrics, strong_hit_chunks
 
+# def explain_evidence(flags, max_items=3):
+#     """
+#     Generate severity-aware explanations for evidence structure,
+#     returning separate lists for weaknesses and strengths.
+#     """
+#     explanations = {
+#         "weaknesses": [],
+#         "strengths": []
+#     }
+
+#     # --- Critical states ---    
+#     if flags.get("absent"):
+#         explanations["weaknesses"].append("No sufficiently relevant evidence was identified")
+#         return explanations
+
+#     if flags.get("isolated"):
+#         explanations["weaknesses"].append("A single highly prominent passage was found")
+#         return explanations
+
+#     # --- Weaknesses ---
+#     if flags.get("single_source_dominance"):
+#         explanations["weaknesses"].append("Most highly relevant passages come from the same paper")
+
+#     if flags.get("low_diversity"):
+#         explanations["weaknesses"].append("Highly relevant passages come from few distinct sources")
+
+#     if flags.get("low_density"):
+#         explanations["weaknesses"].append("Only a limited number of highly relevant passages were found")
+
+#     # --- Strengths ---
+#     if flags.get("high_density"):
+#         explanations["strengths"].append("Several retrieved passages are highly relevant")
+
+#     if flags.get("multiple_relevant_sources"):
+#         explanations["strengths"].append("Highly relevant passages come from multiple independent sources")
+
+#     if flags.get("well_balanced"):
+#         explanations["strengths"].append("Highly relevant passages are well distributed across different sources")
+
+#     # --- Optional: limit items ---
+#     explanations["weaknesses"] = explanations["weaknesses"][:max_items]
+#     explanations["strengths"] = explanations["strengths"][:max_items]
+
+#     return explanations
 
 
 def evaluate_evidence_structure(chunks, params, contributions_distr):
@@ -235,13 +279,22 @@ def evaluate_evidence_structure(chunks, params, contributions_distr):
         return None, None, None, None
     
     a, b = params["a"], params["b"]
-    q25, q75 = contributions_distr["contributions_per_query"]["q25"], contributions_distr["contributions_per_query"]["q75"]
-    min_contribution_threshold = contributions_distr["all_contributions"]["q25"]
+    
+    q10_contributions, q25_contributions, q75_contributions, q90_contributions = (contributions_distr["contributions_per_query"]["q10"],
+                                                                                  contributions_distr["contributions_per_query"]["q25"], 
+                                                                                  contributions_distr["contributions_per_query"]["q75"],
+                                                                                  contributions_distr["contributions_per_query"]["q90"])
+    
+    min_contribution_threshold = contributions_distr["chunk_contributions"]["q25"]
 
+    q25_distinctsources, q90_distinctsources = (contributions_distr["distinct_effective_sources_per_query"]["q25"],
+                                                contributions_distr["distinct_effective_sources_per_query"]["q90"])
+
+    
     scores = np.array([c["final_score"] for c in chunks])
     paper_ids = [c["paper_id"] for c in chunks]
 
-    mean_score, std_score, max_score = scores.mean(), scores.std(), scores.max()
+    mean_score, std_score = scores.mean(), scores.std()
 
     # Z-normalization
     if std_score < 1e-6:
@@ -259,38 +312,55 @@ def evaluate_evidence_structure(chunks, params, contributions_distr):
             pid = paper_ids[i]
             source_weights[pid] = source_weights.get(pid, 0) + contrib
 
-    relevant_mass = sum(contributions)
-    dominance_ratio = max(source_weights.values()) / relevant_mass
     distinct_effective_sources = len(source_weights)
+    relevant_mass = sum(contributions)
+
+    if source_weights:
+        dominance_ratio = max(source_weights.values()) / relevant_mass
+    else:
+        dominance_ratio = 1.0
 
     # --------------------------
     # Evidence structure metrics
     # --------------------------
-    density_score = min(relevant_mass / q75, 1.0)
-    diversity_score = min(distinct_effective_sources / 3.0, 1.0)
+    density_score = min(relevant_mass / q90_contributions, 1.0)
+    diversity_score = min(distinct_effective_sources / q90_distinctsources, 1.0)
     balance_score = 1.0 - dominance_ratio
 
-    evidence_structure = 0.4 * density_score + 0.4 * diversity_score + 0.2 * balance_score
+    evidence_structure = 0.5 * density_score + 0.3 * diversity_score + 0.2 * balance_score
     evidence_structure = max(0.0, min(1.0, evidence_structure))
 
+    sufficient_density = relevant_mass >= q25_contributions
+
     flags = {
-        "absent": relevant_mass < min_contribution_threshold,  # nothing meaningful
-        "isolated": relevant_mass < q25,
-        "single_source_dominance": distinct_effective_sources == 1 and relevant_mass > q25,
-        "low_diversity": distinct_effective_sources <= 2,
-        "multiple_relevant_sources": distinct_effective_sources > 2 and relevant_mass > q25,
-        "well_balanced": dominance_ratio < 0.6 and distinct_effective_sources > 2,
-        "high_density": relevant_mass > q75,
+        "absent": relevant_mass < q10_contributions,
+
+        "low_density": relevant_mass < q25_contributions,
+        "high_density": relevant_mass > q75_contributions,
+
+        # diversity
+        "low_diversity": sufficient_density and distinct_effective_sources <= q25_distinctsources,
+        "multiple_relevant_sources": sufficient_density and distinct_effective_sources > q25_distinctsources,
+
+        # dominance / balance
+        "single_source_dominance": sufficient_density and dominance_ratio > 0.7,
+        "well_balanced": sufficient_density and dominance_ratio < 0.6 and distinct_effective_sources > q25_distinctsources,
     }
 
     metrics = {
-        "mean_score_global": round(mean_score,2),
-        "std_score_global": round(std_score,2),
-        "max_score": round(max_score,2),
-        "relevant_mass": relevant_mass,
-        "distinct_sources_hits": distinct_effective_sources,
-        "dominance_ratio": round(dominance_ratio,2) if distinct_effective_sources >= 1 else None
+        "evidence density": round(density_score,2),
+        "source diversity": round(diversity_score,2),
+        "source balance": round(balance_score,2)
     }
+
+    # metrics = {
+    #     "mean_score_global": round(mean_score,2),
+    #     "std_score_global": round(std_score,2),
+    #     "max_score": round(max_score,2),
+    #     "relevant_mass": relevant_mass,
+    #     "distinct_sources_hits": distinct_effective_sources,
+    #     "dominance_ratio": round(dominance_ratio,2) if distinct_effective_sources >= 1 else None
+    # }
 
     strong_hit_chunks = []
 
@@ -299,10 +369,7 @@ def evaluate_evidence_structure(chunks, params, contributions_distr):
 
 
 def explain_evidence(flags, max_items=3):
-    """
-    Generate severity-aware explanations for evidence structure,
-    returning separate lists for weaknesses and strengths.
-    """
+
     explanations = {
         "weaknesses": [],
         "strengths": []
@@ -310,34 +377,44 @@ def explain_evidence(flags, max_items=3):
 
     # --- Critical states ---    
     if flags.get("absent"):
-        explanations["weaknesses"].append("No sufficiently relevant evidence was identified")
+        explanations["weaknesses"].append(
+            "No sufficiently relevant evidence was identified"
+        )
         return explanations
 
-    if flags.get("isolated"):
-        explanations["weaknesses"].append("A single highly prominent passage was found")
+    if flags.get("low_density"):
+        explanations["weaknesses"].append(
+            "Only a limited amount of relevant evidence was identified"
+        )
         return explanations
 
     # --- Weaknesses ---
     if flags.get("single_source_dominance"):
-        explanations["weaknesses"].append("Most highly relevant passages come from the same paper")
+        explanations["weaknesses"].append(
+            "Most relevant evidence originates from the same source"
+        )
 
     if flags.get("low_diversity"):
-        explanations["weaknesses"].append("Highly relevant passages come from few distinct sources")
-
-    if flags.get("low_density"):
-        explanations["weaknesses"].append("Only a limited number of highly relevant passages were found")
+        explanations["weaknesses"].append(
+            "Relevant evidence comes from only a few distinct sources"
+        )
 
     # --- Strengths ---
     if flags.get("high_density"):
-        explanations["strengths"].append("Several retrieved passages are highly relevant")
+        explanations["strengths"].append(
+            "A substantial amount of relevant evidence was retrieved"
+        )
 
     if flags.get("multiple_relevant_sources"):
-        explanations["strengths"].append("Highly relevant passages come from multiple independent sources")
+        explanations["strengths"].append(
+            "Relevant evidence comes from multiple independent sources"
+        )
 
     if flags.get("well_balanced"):
-        explanations["strengths"].append("Highly relevant passages are well distributed across different sources")
+        explanations["strengths"].append(
+            "Relevant evidence is well distributed across different sources"
+        )
 
-    # --- Optional: limit items ---
     explanations["weaknesses"] = explanations["weaknesses"][:max_items]
     explanations["strengths"] = explanations["strengths"][:max_items]
 
@@ -380,7 +457,7 @@ def evaluate_grounding_quality(metrics):
         "single_source_reliance": used_papers == 1,
         "multi_source_grounding": used_papers >= 3,
         "high_source_dominance": dominance > 0.7,
-        "balanced_source_usage": dominance <= 0.6,
+        "balanced_source_usage": dominance <= 0.4,
         "cross_source_corroboration": multi_ratio >= 0.3,
         "no_corroboration": multi_ratio == 0,
         "low_corroboration": multi_ratio <= 0.2
@@ -390,15 +467,17 @@ def evaluate_grounding_quality(metrics):
         return 0.0, flags
 
     # Base score from source count
-    if used_papers >= 3:
-        base = 0.65
+    if used_papers > 3:
+        base = 0.75
+    elif used_papers == 3:
+        base = 0.60
     elif used_papers == 2:
-        base = 0.40
+        base = 0.45
     else:
         base = 0.35
 
     dominance_penalty = max(0, dominance - 0.5) * 0.5
-    corroboration_bonus = multi_ratio * 0.35
+    corroboration_bonus = multi_ratio * 0.4
 
     score = base + corroboration_bonus - dominance_penalty
     score = max(0.0, min(1.0, score))
@@ -429,19 +508,21 @@ def explain_grounding(flags, max_items=3):
     # --- Weaknesses (ordered by severity) ---
     if flags.get("no_corroboration"):
         explanations["weaknesses"].append("Claims are not corroborated across multiple sources")
-
+    
     elif flags.get("low_corroboration"):
         explanations["weaknesses"].append("Only limited cross-source corroboration is present")
 
-    if flags.get("high_source_dominance"):
-        explanations["weaknesses"].append("Most citations come from one source")
 
     if flags.get("single_source_reliance"):
         explanations["weaknesses"].append("The synthesis relies on a single source")
+    
+    elif flags.get("high_source_dominance"):
+        explanations["weaknesses"].append("Most citations come from one source")
+    
 
     # --- Strengths (simple → sophisticated) ---
     if flags.get("multi_source_grounding"):
-        explanations["strengths"].append("The synthesis integrates evidence from multiple independent sources")
+        explanations["strengths"].append("The synthesis uses evidence from multiple independent sources")
 
     if flags.get("balanced_source_usage"):
         explanations["strengths"].append("Citations are fairly distributed across different sources")

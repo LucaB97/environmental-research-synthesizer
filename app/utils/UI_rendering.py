@@ -18,7 +18,7 @@ def format_explanation(expl):
 
     # --- Case 1: simple string (semantic axis) ---
     if isinstance(expl, str):
-        return expl
+        return f"<p style='margin-bottom:4px;'>{expl}</p><ul>"
 
     # --- Case 2: structured dictionary ---
     if isinstance(expl, dict):
@@ -28,13 +28,13 @@ def format_explanation(expl):
         strengths = expl.get("strengths", [])
 
         if weaknesses:
-            bullets += "<b>Weaknesses:</b><ul>"
+            bullets += "<p style='font-weight:600; margin-bottom:4px;'>Weaknesses</p><ul>"
             for w in weaknesses:
                 bullets += f"<li>{w}</li>"
-            bullets += "</ul>"
+            bullets += "</ul><br>"
 
         if strengths:
-            bullets += "<b>Strengths:</b><ul>"
+            bullets += "<p style='font-weight:600; margin-bottom:4px;'>Strengths</p><ul>"
             for s in strengths:
                 bullets += f"<li>{s}</li>"
             bullets += "</ul>"
@@ -51,7 +51,6 @@ def format_explanation(expl):
 def render_confidence_profile(confidence):
 
     st.subheader("Confidence Profile")
-
     semantic = confidence["semantic"]
     evidence = confidence["evidence"]
     grounding = confidence["grounding"]
@@ -134,9 +133,9 @@ def render_confidence_profile(confidence):
     """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3, gap="large")
-    semantic_caption = "How closely the most relevant retrieved passages match the query"
-    evidence_caption = "How numerous and well-distributed are the most relevant passages"
-    grounding_caption = "How well the answer integrates and balances cited sources"
+    semantic_caption = "How closely the top retrieved passages match the query"
+    evidence_caption = "How much relevant evidence appears among the top passages"
+    grounding_caption = "How well the answer integrates and balances the cited evidence"
 
     # ---- Semantic alignment ----
     with col1:

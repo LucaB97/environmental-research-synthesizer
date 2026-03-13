@@ -217,8 +217,8 @@ def query_endpoint(request: QueryRequest, req: Request):
     # --- Early returns ---
     #
 
-    if semantic_alignment < 0.25 or evidence_flags["absent"] or evidence_flags["isolated"]:
-        limitations=assign_limitations(semantic_alignment, absent=evidence_flags["absent"], isolated=evidence_flags["isolated"])
+    if semantic_alignment < 0.25 or evidence_flags["absent"] or evidence_flags["low_density"]:
+        limitations=assign_limitations(semantic_alignment, absent=evidence_flags["absent"], low_density=evidence_flags["low_density"])
         confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_flags, reason="Grounding score is absent because synthesis was not performed")
         trace={
             "query_expansion": queries,
@@ -320,7 +320,7 @@ def query_endpoint(request: QueryRequest, req: Request):
 
         # --- Retry decision ---
         if grounding_score < 0.5 and attempt < max_attempts:
-            retry_reason = determine_retry_reason(grounding_metrics, evidence_meta["distinct_sources_hits"])
+            retry_reason = determine_retry_reason(grounding_metrics)
             retry_triggers.append(retry_reason) 
         else:
             retry_reason = None             

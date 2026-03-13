@@ -17,7 +17,7 @@ METADATA_PATH = PROJECT_ROOT / "data" / "metadata.csv"
 CHUNKS_PATH = PROJECT_ROOT / "data" / "chunks_500t_100o.json"
 FAISS_PATH = PROJECT_ROOT / "data" / "faiss_openai_500t_100o.index"
 SEMANTIC_ALIGNMENT_PARAMS_PATH = PROJECT_ROOT / "data" / "semantic_alignment_params.json"
-HITS_DISTRIBUTION_PARAMS_PATH = PROJECT_ROOT / "data" / "contributions.json"
+HITS_DISTRIBUTION_PARAMS_PATH = PROJECT_ROOT / "data" / "contributions_params.json"
 
 def load_system(app, profile: Optional[str] = None):
     

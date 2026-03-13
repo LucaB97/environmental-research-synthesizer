@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CHUNKS_PATH = PROJECT_ROOT / "data" / "chunks_500t_100o.json"
 FAISS_PATH = PROJECT_ROOT / "data" / "faiss_openai_500t_100o.index"
 SEMANTIC_ALIGNMENT_PARAMS_PATH = PROJECT_ROOT / "data" / "semantic_alignment_params.json"
-
+HITS_DISTRIBUTION_PARAMS_PATH = PROJECT_ROOT / "data" / "contributions_params.json"
 
 def semantic_norm(score, a, b):
     import math
@@ -34,10 +34,14 @@ with open(CHUNKS_PATH, "r", encoding="utf-8") as f:
 with open(SEMANTIC_ALIGNMENT_PARAMS_PATH, encoding="utf-8") as f:
     semantic_alignment_params = json.load(f)
 
+with open(HITS_DISTRIBUTION_PARAMS_PATH, encoding="utf-8") as f:
+    contributions_params = json.load(f)
+
 # Parameters configuration
 a,b = semantic_alignment_params["a"], semantic_alignment_params["b"]
 std_global = semantic_alignment_params["std_global"]
 alpha = 0.5
+min_contribution_threshold = contributions_params["chunk_contributions"]["q25"]
 
 
 index = load_faiss(FAISS_PATH)
@@ -84,8 +88,7 @@ queries = [
 
 max_score_list = []
 mean_score_list = []
-sum_contributions_list = []
-all_contributions = []
+distinct_effective_sources_list = []
 
 for i, q in enumerate(queries):
     print(f"{i+1}/{len(queries)}")
@@ -94,6 +97,7 @@ for i, q in enumerate(queries):
     reranked_chunks = relevance_profiler.rerank(q, retrieved_chunks)
     
     relevant_chunks = reranked_chunks[:15]
+    paper_ids = [c["paper_id"] for c in relevant_chunks]
     scores = np.array([chunk["final_score"] for chunk in relevant_chunks])    
     mean_score, std_score, max_score = scores.mean(), scores.std(), scores.max()
 
@@ -105,33 +109,30 @@ for i, q in enumerate(queries):
     
     abs_relevance = np.array([semantic_norm(s, a, b) for s in scores])
     contributions = compute_contribution(abs_relevance, z)
-    all_contributions.extend(contributions)
 
-    ## Append
-    max_score_list.append(max_score)
-    mean_score_list.append(mean_score)
-    sum_contributions_list.append(contributions.sum())
+    source_weights = {}
+    for i, contrib in enumerate(contributions):
+        if contrib > min_contribution_threshold:
+            pid = paper_ids[i]
+            source_weights[pid] = source_weights.get(pid, 0) + contrib
 
-params = {
-    "contributions_per_query": {
-        "q10": np.percentile(sum_contributions_list, 10),
-        "q25": np.percentile(sum_contributions_list, 25),
-        "q50": np.percentile(sum_contributions_list, 50),
-        "q75": np.percentile(sum_contributions_list, 75),
-        "observed_values": sum_contributions_list,
-    },
-    "chunk_contributions": {
-        "q10": np.percentile(all_contributions, 10),
-        "q25": np.percentile(all_contributions, 25),
-        "q50": np.percentile(all_contributions, 50),
-    }
+    distinct_effective_sources_list.append(len(source_weights))
+
+
+contributions_params["distinct_effective_sources_per_query"] = {
+    "q10": np.percentile(distinct_effective_sources_list, 10),
+    "q25": np.percentile(distinct_effective_sources_list, 25),
+    "q50": np.percentile(distinct_effective_sources_list, 50),
+    "q75": np.percentile(distinct_effective_sources_list, 75),
+    "q90": np.percentile(distinct_effective_sources_list, 90),
+    "observed_values": distinct_effective_sources_list,
 }
 
 # Choose a location in your project
-params_path = PROJECT_ROOT / "data" / "contributions.json"
+params_path = PROJECT_ROOT / "data" / "contributions_params.json"
 params_path.parent.mkdir(exist_ok=True)
 
 with open(params_path, "w", encoding="utf-8") as f:
-    json.dump(params, f, indent=2)
+    json.dump(contributions_params, f, indent=2)
 
 print(f"Saved parameters to {params_path}")
