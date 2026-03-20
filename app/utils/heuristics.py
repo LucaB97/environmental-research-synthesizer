@@ -56,13 +56,13 @@ def determine_retry_reason(metrics):
     # -----------------------------------------
     # 1. Source dominance despite diversity
     # -----------------------------------------
-    if (metrics["available_papers"] > 3 and metrics["paper_dominance"] > 0.75):
+    if (metrics["available_papers"] > 3 and metrics["paper_dominance"] > 0.7):
         failures["source_dominance"] = metrics["paper_dominance"]
 
     # -----------------------------------------
     # 2. Extremely low evidence usage
     # -----------------------------------------
-    if metrics["chunk_coverage"] <= 0.2:
+    if metrics["chunk_coverage"] < 0.3:
         failures["low_evidence_usage"] = 1 - metrics["chunk_coverage"]
 
     # -----------------------------------------

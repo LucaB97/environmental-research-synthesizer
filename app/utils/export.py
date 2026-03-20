@@ -5,7 +5,7 @@ import streamlit as st
 
 def response_to_json(
     response: Dict,
-    include_debug: bool = False
+    include_trace: bool = False
 ) -> str:
     """
     Serialize full query response to JSON.
@@ -18,8 +18,8 @@ def response_to_json(
     else:
         payload = dict(response)
 
-    if not include_debug:
-        payload.pop("debug", None)
+    if not include_trace:
+        payload.pop("trace", None)
 
     return json.dumps(payload, indent=2)
 
@@ -31,8 +31,12 @@ def response_to_markdown(response: Dict[str, Any]) -> str:
     """
     lines = []
 
-    # Title
-    lines.append("# Synthesized Answer\n")
+    # Question
+    lines.append("# Question\n")
+    lines.append(response.get("question", []))
+
+    # Synthesis
+    lines.append("\n# Synthesized Answer\n")
 
     for item in response.get("answer", []):
         text = item["text"]
@@ -59,19 +63,33 @@ def response_to_markdown(response: Dict[str, Any]) -> str:
                 f"- **{src['title']}** — {author_year}{journal}"
             )
 
-    # Evidence metrics
-    metrics = response.get("evidence_metrics")
-    if metrics:
-        lines.append("\n## Evidence Metrics\n")
-        for k, v in metrics.items():
-            lines.append(f"- **{k.replace('_', ' ').title()}**: {v}")
+    # # Metadata
+    # meta = response.get("meta")
+    # if meta:
+    #     lines.append("\n# Metadata\n")
+    #     for k, v in meta.items():
+    #         lines.append(f"- **{k.replace('_', ' ').title()}**: {v}")
+
+    # # Grounding metrics
+    # metrics = response.get("grounding_metrics")
+    # if metrics:
+    #     lines.append("\n## Grounding metrics\n")
+    #     for k, v in metrics.items():
+    #         lines.append(f"- **{k.replace('_', ' ').title()}**: {v}")
 
     # Evidence metrics
     confidence = response.get("confidence")
     if confidence:
-        lines.append("\n## Confidence\n")
-        for k, v in confidence.items():
-            lines.append(f"{k.title()}: {v}")
+        lines.append("\n## Confidence profile\n")
+        
+        for axis_name, axis_data in confidence.items():
+            lines.append(f"### {axis_name.capitalize()}")
+            
+            if isinstance(axis_data, dict):
+                for k, v in axis_data.items():
+                    lines.append(f"- **{k.capitalize()}**: {v}")
+            else:
+                lines.append(f"- {axis_data}")
 
     return "\n".join(lines)
 
@@ -90,13 +108,13 @@ def export_output(data):
             )
                 
             if export_format == "JSON":
-                has_debug = bool(data.get("debug"))
-                include_debug = st.checkbox(
-                    "Include debug evidence (chunks & papers)",
+                has_trace = bool(data.get("trace"))
+                include_trace = st.checkbox(
+                    "Include diagnostic info (chunks usage)",
                     value=False,
-                    disabled=not has_debug
+                    disabled=not has_trace
                 )
-                data_export = response_to_json(data, include_debug)
+                data_export = response_to_json(data, include_trace)
                 filename = "query_response.json"
                 mime = "application/json"
 

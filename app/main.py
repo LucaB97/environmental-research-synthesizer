@@ -162,7 +162,7 @@ def query_endpoint(request: QueryRequest, req: Request):
 
     semantic_alignment = evaluate_semantic_alignment(reranked_chunks, profiling_params, top_N)
     
-    evidence_structure, evidence_flags, evidence_meta, strong_chunks = evaluate_evidence_structure(reranked_chunks[:top_N], profiling_params, effective_hits_distribution)
+    evidence_structure, evidence_flags, evidence_meta = evaluate_evidence_structure(reranked_chunks[:top_N], profiling_params, effective_hits_distribution)
 
     #
     # --- Retrieval retry ---
@@ -203,15 +203,7 @@ def query_endpoint(request: QueryRequest, req: Request):
 
             semantic_alignment = evaluate_semantic_alignment(reranked_chunks, profiling_params, top_N)
     
-            evidence_structure, evidence_flags, evidence_meta, strong_chunks = evaluate_evidence_structure(reranked_chunks[:top_N], profiling_params, effective_hits_distribution)
-
-
-    for chunk in strong_chunks:
-        tmp_metadata = metadata.loc[chunk["paper_id"]]
-        chunk['title'] = str(tmp_metadata['title'])
-        chunk['authors'] = str(tmp_metadata['authors'])
-        chunk['year'] = int(tmp_metadata['year'])
-        chunk['journal'] = str(tmp_metadata['journal'])
+            evidence_structure, evidence_flags, evidence_meta = evaluate_evidence_structure(reranked_chunks[:top_N], profiling_params, effective_hits_distribution)
 
     #
     # --- Early returns ---
@@ -222,7 +214,6 @@ def query_endpoint(request: QueryRequest, req: Request):
         confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_flags, reason="Grounding score is absent because synthesis was not performed")
         trace={
             "query_expansion": queries,
-            "strong_hit_chunks": strong_chunks            
             }
         return build_response(query, pipeline_status, limitations, meta=meta, evidence_structure=evidence_meta, confidence=confidence_profile, trace=trace)   
 
@@ -247,7 +238,7 @@ def query_endpoint(request: QueryRequest, req: Request):
         for c in provided_chunks
     }
 
-    max_attempts = 2
+    max_attempts = 3
     attempt = 0
     synthesis_output = None
     best_output, best_score = None, -1
@@ -289,7 +280,6 @@ def query_endpoint(request: QueryRequest, req: Request):
                                                              reason="Grounding score is absent because the synthesizer abstained from synthesis")
             trace={
             "query_expansion": queries,
-            "strong_hit_chunks": strong_chunks  
             }
             return build_response(query, pipeline_status, limitations, meta=meta, 
                                   evidence_structure=evidence_meta, confidence=confidence_profile, trace=trace)   
@@ -322,6 +312,7 @@ def query_endpoint(request: QueryRequest, req: Request):
         if grounding_score < 0.5 and attempt < max_attempts:
             retry_reason = determine_retry_reason(grounding_metrics)
             retry_triggers.append(retry_reason) 
+            print(f"GROUNDING SCORE: {grounding_score}\nGROUNDING FLAGS: {grounding_flags}\nGROUNDING METRICS: {grounding_metrics}")
         else:
             retry_reason = None             
 
