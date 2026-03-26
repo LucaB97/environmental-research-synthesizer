@@ -44,7 +44,11 @@ class OpenAIEmbedding:
         from openai import OpenAI
         import os
 
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        key = os.getenv("OPENAI_API_KEY")
+        if key is None:
+            raise ValueError("No OpenAI API key found.")
+        
+        client = OpenAI(api_key=key)
 
         if isinstance(texts, str):
             texts = [texts]

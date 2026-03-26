@@ -1,10 +1,10 @@
 class InitializationConfig:
     def __init__(
         self,
-        chunk_size=500,
-        overlap=100,
-        embedding="openai",
-        alpha_std=0.5
+        chunk_size,
+        overlap,
+        embedding,
+        alpha_std
     ):
         if overlap >= chunk_size:
             raise ValueError("Overlap must be smaller than chunk size.")
@@ -16,3 +16,11 @@ class InitializationConfig:
         self.overlap = overlap
         self.embedding = embedding
         self.alpha_std = alpha_std
+
+
+DEFAULT_CONFIG = InitializationConfig(
+    chunk_size=500,
+    overlap=100,
+    embedding="openai",
+    alpha_std=0.5
+)

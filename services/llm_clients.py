@@ -10,7 +10,11 @@ class OpenAIClient(BaseLLMClient):
         import os
         from openai import OpenAI
         
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        key = os.getenv("OPENAI_API_KEY")
+        if key is None:
+            raise ValueError("No OpenAI API key found.")
+        
+        self.client = OpenAI(api_key=key)
         self.model_name = model_name
         self.max_tokens = max_tokens
         self.temperature = temperature

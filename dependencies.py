@@ -1,10 +1,9 @@
 import os
 import pandas as pd
 import json
-from pathlib import Path
-from typing import Optional
+from dotenv import load_dotenv
 
-from initialization.config import InitializationConfig
+from initialization.config import DEFAULT_CONFIG
 from initialization.pipeline import initialize_system
 
 from services.embeddings import OpenAIEmbedding, HFEmbedding
@@ -19,17 +18,16 @@ from pipeline.llm.generation import ResearchSynthesisEngine
 from pipeline.orchestration import RAGPipeline
 
 
-def load_system(app, profile: Optional[str] = None):
+def load_system(app):
     
-    if profile is None:
-        profile = os.getenv("SYNTH_PROFILE", "public")
+    load_dotenv()
+    
+    profile = os.getenv("SYNTH_PROFILE", "public")
 
-    config = InitializationConfig(
-        chunk_size=500,
-        overlap=100,
-        embedding="openai",
-        alpha_std=0.5
-    )
+    if profile not in ["public", "gpu"]:
+        raise ValueError(f"Invalid profile: {profile}")
+
+    config = DEFAULT_CONFIG
 
     artifacts = initialize_system(config)
 
@@ -62,8 +60,6 @@ def load_system(app, profile: Optional[str] = None):
             "mistralai/Mistral-7B-Instruct-v0.2",
             load_in_4bit=True
         )
-    else:
-        raise ValueError(f"Unknown profile: {profile}")
 
     # ---- Core components ----
     scope_classifier = QueryScopeClassifier(llm)
