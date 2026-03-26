@@ -22,6 +22,8 @@ def initialize_system(config: InitializationConfig):
 
     # --- Step 1: extraction ---
     if not chunks_path.exists():
+        if not config.auto_build:
+            raise RuntimeError("Missing chunks and auto_build is disabled")
         print("Running TEXT EXTRACTION & CHUNKING")
         extract_chunks(
             config,
@@ -32,11 +34,15 @@ def initialize_system(config: InitializationConfig):
 
     # --- Step 2: indexing ---
     if not index_path.exists():
+        if not config.auto_build:
+            raise RuntimeError("Missing index and auto_build is disabled")
         print("Running INDEXING")
         build_index_pipeline(config, chunks_path, index_path)
 
     # --- Step 3: tuning ---
     if not params_path.exists():
+        if not config.auto_build:
+            raise RuntimeError("Missing parameters and auto_build is disabled")
         print("Running PARAMETERS TUNING")
         run_tuning(config, chunks_path, index_path, params_path)
 

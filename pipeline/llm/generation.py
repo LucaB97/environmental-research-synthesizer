@@ -37,19 +37,19 @@ content:
 
     def _validate_output(self, raw_output: str):
         if raw_output.count("{") != raw_output.count("}"):
-            raise ValueError("LLM output appears truncated.")
+            raise ValueError("LLM output appears truncated")
 
         parsed = json.loads(raw_output)
 
         if "answer" not in parsed or not isinstance(parsed["answer"], list):
-            raise ValueError("Invalid or missing 'answer'.")
+            raise ValueError("Invalid or missing 'answer'")
 
         if "limitations" not in parsed or not isinstance(parsed["limitations"], list):
-            raise ValueError("Invalid or missing 'limitations'.")
+            raise ValueError("Invalid or missing 'limitations'")
 
         for i, s in enumerate(parsed["answer"]):
             if "text" not in s or "citations" not in s:
-                raise ValueError(f"Malformed answer item at index {i}.")
+                raise ValueError(f"Malformed answer item at index {i}")
 
         return parsed
 
@@ -78,8 +78,9 @@ content:
             except Exception as e:
                 last_error = e
 
-        raise ValueError(
-            "LLM failed to produce valid structured output "
-            f"after {self.max_attempts} attempts. "
-            f"Last error: {str(last_error)}"
-        )
+        raise ValueError(last_error)
+        # raise ValueError(
+        #     "LLM failed to produce valid structured output "
+        #     f"after {self.max_attempts} attempts. "
+        #     f"Last error: {str(last_error)}"
+        # )

@@ -182,8 +182,8 @@ def run_tuning(config, chunks_path, index_path, params_path):
     
     parameters = {}
     parameters = normalization_params(QUERIES, retriever, relevance_profiler, parameters)
-    parameters = contribution_quantiles(QUERIES, retriever, relevance_profiler, parameters, config.alpha_std)
-    parameters = effective_sources_quantiles(QUERIES, retriever, relevance_profiler, parameters, config.alpha_std)
+    parameters = contribution_quantiles(QUERIES, retriever, relevance_profiler, parameters, alpha=0.5)
+    parameters = effective_sources_quantiles(QUERIES, retriever, relevance_profiler, parameters, alpha=0.5)
 
     with open(params_path, "w", encoding="utf-8") as f:
         json.dump(parameters, f, indent=2)

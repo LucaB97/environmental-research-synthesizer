@@ -5,46 +5,32 @@ from utils.citations import CitationStyle
 ### Confidence profile
 
 def format_explanation(expl):
-    """
-    Formats explanation for tooltip rendering.
-    Supports:
-      - None
-      - string (semantic axis)
-      - dict with 'strengths' and/or 'weaknesses'
-    """
 
     if expl is None:
         return "No notable signals."
 
-    # --- Case 1: simple string (semantic axis) ---
+    # --- Case 1: string ---
     if isinstance(expl, str):
-        return f"<p style='margin-bottom:4px;'>{expl}</p><ul>"
+        return f"<p style='margin-bottom:4px;'>{expl}</p>"
 
-    # --- Case 2: structured dictionary ---
-    if isinstance(expl, dict):
-        bullets = ""
+    # --- Case 2: list ---
+    if isinstance(expl, list):
+        html = ""
 
-        weaknesses = expl.get("weaknesses", [])
-        strengths = expl.get("strengths", [])
+        for bullet in expl:
+            parts = bullet.split("\n", 1)
+            title = parts[0]
+            desc = parts[1] if len(parts) > 1 else ""
 
-        if weaknesses:
-            bullets += "<p style='font-weight:600; margin-bottom:4px;'>Weaknesses</p><ul>"
-            for w in weaknesses:
-                bullets += f"<li>{w}</li>"
-            bullets += "</ul><br>"
+            html += (
+                "<div style='margin-bottom:10px;'>"
+                f"<div style='font-weight:600;'>{title}</div>"
+                f"<div>{desc}</div>"
+                "</div>"
+            )
 
-        if strengths:
-            bullets += "<p style='font-weight:600; margin-bottom:4px;'>Strengths</p><ul>"
-            for s in strengths:
-                bullets += f"<li>{s}</li>"
-            bullets += "</ul>"
+        return f"<div>{html}</div>"
 
-        if bullets == "":
-            return "No notable signals."
-
-        return bullets
-
-    # --- Fallback (unexpected type) ---
     return "No notable signals."
 
 
@@ -119,6 +105,7 @@ def render_confidence_profile(confidence):
         margin-left: -130px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         font-size: 0.8rem;
+        font-weight: 400;
     }
 
     .tooltip:hover .tooltiptext {
@@ -290,7 +277,7 @@ def show_grounding_metrics(data):
     metrics = data.get("grounding_metrics")
 
     if metrics is not None:
-        with st.expander("Grounding Metrics", expanded=False):
+        with st.expander("Grounding Metrics (advanced)", expanded=False):
             
             if not metrics:
                 st.info("Grounding metrics are unavailable for this response.")

@@ -111,15 +111,12 @@ def evaluate_evidence_structure(chunks, params):
     
     a, b = params["normalization_params"]["a"], params["normalization_params"]["b"]
     
-    q10_contributions, q25_contributions, q75_contributions, q90_contributions = (params["contributions_per_query"]["q10"],
-                                                                                  params["contributions_per_query"]["q25"], 
-                                                                                  params["contributions_per_query"]["q75"],
-                                                                                  params["contributions_per_query"]["q90"])
+    q10_contributions, q90_contributions = (params["contributions_per_query"]["q10"],
+                                            params["contributions_per_query"]["q90"])
     
     min_contribution_threshold = params["chunk_contributions"]["q25"]
 
-    q25_distinctsources, q90_distinctsources = (params["effective_sources_per_query"]["q25"],
-                                                params["effective_sources_per_query"]["q90"])
+    q90_distinctsources = params["effective_sources_per_query"]["q90"]
 
     
     scores = np.array([c["final_score"] for c in chunks])
@@ -161,21 +158,19 @@ def evaluate_evidence_structure(chunks, params):
     evidence_structure = 0.5 * density_score + 0.3 * diversity_score + 0.2 * balance_score
     evidence_structure = max(0.0, min(1.0, evidence_structure))
 
-    sufficient_density = relevant_mass >= q25_contributions
-
     flags = {
         "absent": relevant_mass < q10_contributions,
 
-        "low_density": relevant_mass < q25_contributions,
-        "high_density": relevant_mass > q75_contributions,
+        "low_density": density_score < 0.4,
+        "high_density": density_score >= 0.7,
 
         # diversity
-        "low_diversity": sufficient_density and distinct_effective_sources <= q25_distinctsources,
-        "multiple_relevant_sources": sufficient_density and distinct_effective_sources > q25_distinctsources,
+        "low_diversity": diversity_score < 0.4,
+        "multiple_relevant_sources": diversity_score >= 0.7,
 
         # dominance / balance
-        "single_source_dominance": sufficient_density and dominance_ratio > 0.7,
-        "well_balanced": sufficient_density and dominance_ratio < 0.6 and distinct_effective_sources > q25_distinctsources,
+        "single_source_dominance": balance_score < 0.4,
+        "well_balanced": balance_score >= 0.7,
     }
 
     metrics = {
@@ -188,57 +183,46 @@ def evaluate_evidence_structure(chunks, params):
 
 
 
-def explain_evidence(flags, max_items=3):
+def explain_evidence(metrics, flags):
 
-    explanations = {
-        "weaknesses": [],
-        "strengths": []
-    }
 
     # --- Critical states ---    
     if flags.get("absent"):
-        explanations["weaknesses"].append(
-            "No sufficiently relevant evidence was identified"
-        )
-        return explanations
+        return "No sufficiently relevant evidence was identified"
 
-    if flags.get("low_density"):
-        explanations["weaknesses"].append(
-            "Only a limited amount of relevant evidence was identified"
-        )
-        return explanations
 
-    # --- Weaknesses ---
-    if flags.get("single_source_dominance"):
-        explanations["weaknesses"].append(
-            "Most relevant evidence originates from the same source"
-        )
-
-    if flags.get("low_diversity"):
-        explanations["weaknesses"].append(
-            "Relevant evidence comes from only a few distinct sources"
-        )
-
-    # --- Strengths ---
+    density_bullet = "Evidence density — " + f"{metrics['evidence density']}\n"
+    
     if flags.get("high_density"):
-        explanations["strengths"].append(
-            "A substantial amount of relevant evidence was retrieved"
-        )
+        density_bullet += "A substantial amount of relevant evidence was retrieved"
+
+    elif flags.get("low_density"):
+        density_bullet += "Only a limited amount of relevant evidence was identified"
+    else:
+        density_bullet += "A moderate amount of relevant evidence was retrieved"
+
+
+    diversity_bullet = "Source diversity — " + f"{metrics['source diversity']}\n"
 
     if flags.get("multiple_relevant_sources"):
-        explanations["strengths"].append(
-            "Relevant evidence comes from multiple independent sources"
-        )
+        diversity_bullet += "Relevant evidence comes from multiple independent sources"
+    elif flags.get("low_diversity"):
+        diversity_bullet += "Relevant evidence comes from only a few distinct sources"
+    else:
+        diversity_bullet += "Relevant evidence spans a limited number of sources"
+
+
+    balance_bullet = "Source balance — " + f"{metrics['source balance']}\n"
 
     if flags.get("well_balanced"):
-        explanations["strengths"].append(
-            "Relevant evidence is well distributed across different sources"
-        )
+        balance_bullet += "Relevant evidence is well distributed across different sources"
+    elif flags.get("single_source_dominance"):
+        balance_bullet += "Most relevant evidence originates from the same source"
+    else:
+        balance_bullet += "Some sources contribute more heavily than others"
 
-    explanations["weaknesses"] = explanations["weaknesses"][:max_items]
-    explanations["strengths"] = explanations["strengths"][:max_items]
 
-    return explanations
+    return [density_bullet, diversity_bullet, balance_bullet]
 
 
 
@@ -307,66 +291,54 @@ def evaluate_grounding_quality(metrics):
 
 
 
-def explain_grounding(flags, max_items=3):
+def explain_grounding(metrics, flags):
     """
     Generate concise, severity-aware explanations for grounding quality.
-
-    - Strength signals ordered simple → sophisticated.
-    - Max 3 bullets by default.
-    - If critical weakness exists, limit strength signals to 1.
     """
-
-    explanations = {
-        "weaknesses": [],
-        "strengths": []
-    }
 
     # --- Critical ---
     if flags.get("no_citations"):
-        explanations["weaknesses"].append("The answer does not cite any sources")
-        return explanations
+        return "The answer does not cite any sources"
     
-    # --- Weaknesses ---
-    if flags.get("single_source_reliance"):
-        explanations["weaknesses"].append("The synthesis relies on a single source")
     
-    elif flags.get("high_source_dominance"):
-        explanations["weaknesses"].append("Most of the used evidence comes from a single source")
+    source_usage_bullet = f"Source usage — {metrics['used_papers']} papers\n"
     
-    elif flags.get("moderate_source_dominance"):
-        explanations["weaknesses"].append(
-            "A relevant portion of the used evidence comes from a single source"
-        )
-
-    if flags.get("no_corroboration"):
-        explanations["weaknesses"].append("Claims are not corroborated across multiple sources")
-    
-    elif flags.get("low_corroboration"):
-        explanations["weaknesses"].append("Only limited cross-source corroboration is present")
-
-
-    # --- Strengths ---
     if flags.get("multi_source_grounding"):
-        explanations["strengths"].append("The synthesis uses evidence from multiple independent sources")
+        source_usage_bullet += "The synthesis uses evidence from multiple independent sources"
+    elif flags.get("single_source_reliance"):
+        source_usage_bullet += "The synthesis relies on a single source"
+    else:
+        source_usage_bullet += "The synthesis relies on a limited number of sources"
 
-    if flags.get("balanced_source_usage"):
-        explanations["strengths"].append("Citations are fairly distributed across different sources")
 
-    if flags.get("cross_source_corroboration"):
-        explanations["strengths"].append("Several statements are supported by multiple sources")
+    paper_dominance_bullet = f"Source dominance — {metrics['paper_dominance']:.2f}\n"
 
-    # --- Optional: limit items ---
-    explanations["weaknesses"] = explanations["weaknesses"][:max_items]
-    explanations["strengths"] = explanations["strengths"][:max_items]
+    if flags.get("single_source_reliance"):
+        paper_dominance_bullet += "All of the used evidence comes from a single source"
+    elif flags.get("high_source_dominance"):
+        paper_dominance_bullet += "Most of the used evidence comes from a single source"
+    elif flags.get("moderate_source_dominance"):
+        paper_dominance_bullet += "A relevant portion of the used evidence comes from a single source"
+    else:
+        paper_dominance_bullet += "Citations are fairly distributed across different sources"
 
-    return explanations
+
+    corroboration_bullet = f"Cross-source support — {metrics['multi_source_sentence_ratio']:.2f}\n"
+    if flags.get("no_corroboration"):
+        corroboration_bullet += "Claims are not corroborated across multiple sources"
+    elif flags.get("low_corroboration"):
+        corroboration_bullet += "Only limited cross-source corroboration is present"
+    else:
+        corroboration_bullet += "Several statements are supported by multiple sources"
+
+    return [source_usage_bullet, paper_dominance_bullet, corroboration_bullet]
 
 
 
 def evaluate_confidence_profile(pipeline_status, 
                                 semantic_score=None,
-                                evidence_score=None, evidence_flags=None, 
-                                grounding_score=None, grounding_flags=None,
+                                evidence_score=None, evidence_metrics=None, evidence_flags=None, 
+                                grounding_score=None, grounding_metrics=None, grounding_flags=None,
                                 reason=None):
     """
     Compute a multi-axis confidence profile: semantic alignment, evidence structure, grounding quality.
@@ -405,7 +377,7 @@ def evaluate_confidence_profile(pipeline_status,
     evidence_structure = {
         "level": evidence_level,
         "score": evidence_score,
-        "explanation": explain_evidence(evidence_flags) if evidence_flags else []
+        "explanation": explain_evidence(evidence_metrics, evidence_flags) if evidence_flags else []
     }
 
 
@@ -420,7 +392,7 @@ def evaluate_confidence_profile(pipeline_status,
     grounding_quality = {
         "level": grounding_level,
         "score": grounding_score,
-        "explanation": explain_grounding(grounding_flags) if grounding_flags else []
+        "explanation": explain_grounding(grounding_metrics, grounding_flags) if grounding_flags else []
     }
 
     # --- Assemble ---

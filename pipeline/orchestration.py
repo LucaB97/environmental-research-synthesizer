@@ -193,9 +193,10 @@ class RAGPipeline:
         # --- Early returns ---
         #
 
-        if semantic_alignment < 0.25 or evidence_flags["absent"] or evidence_flags["low_density"]:
-            limitations=assign_limitations(semantic_alignment, absent=evidence_flags["absent"], low_density=evidence_flags["low_density"])
-            confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_flags, reason="Grounding score is absent because synthesis was not performed")
+        if semantic_alignment < 0.25 or evidence_flags["absent"]:
+            limitations=assign_limitations(semantic_alignment, absent=evidence_flags["absent"])
+            confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_meta, evidence_flags, 
+                                                             reason="Grounding score is absent because synthesis was not performed")
             trace={
                 "query_expansion": queries,
                 }
@@ -260,7 +261,7 @@ class RAGPipeline:
                 #     meta["synthesis"]["synthesis_retry"]["total_attempts"] = attempt
                 #     meta["synthesis"]["synthesis_retry"]["retry_triggers"] = retry_triggers
 
-                confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_flags, 
+                confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_meta, evidence_flags, 
                                                                 reason="Grounding score is absent because the synthesizer abstained from synthesis")
                 trace={
                 "query_expansion": queries,
@@ -281,7 +282,8 @@ class RAGPipeline:
             grounding_metrics = compute_grounding_metrics(aggregation, sentence_papers)
 
             grounding_score, grounding_flags = evaluate_grounding_quality(grounding_metrics)
-            confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_flags, grounding_score, grounding_flags)
+            confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_meta, evidence_flags, 
+                                                             grounding_score, grounding_metrics, grounding_flags)
             
             score = confidence_profile["grounding"]["score"]
             if score > best_score:
@@ -322,7 +324,7 @@ class RAGPipeline:
             meta["errors"]["generation_error"] = True
             meta["errors"]["total_attempts"] = self.synthesizer.max_attempts
             meta["errors"]["last_error"] = str(last_error)
-            confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_flags, 
+            confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_meta, evidence_flags, 
                                                             reason="Grounding score is absent because the synthesis generation failed")
             return build_query_response(query, pipeline_status, limitations, meta=meta, 
                                 evidence_structure=evidence_meta, confidence=confidence_profile)  

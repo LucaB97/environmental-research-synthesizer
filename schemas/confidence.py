@@ -8,7 +8,7 @@ class AxisProfile(BaseModel):
     explanation: Optional[
         Union[
             str,  # for semantic axis
-            Dict[str, List[str]]  # for evidence / grounding
+            List[str]  # for evidence / grounding
         ]
     ] = None
 
