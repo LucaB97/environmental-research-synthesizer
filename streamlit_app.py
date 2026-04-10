@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 from utils.citations import CitationStyle
-from utils.UI_rendering import render_confidence_profile, render_sentence_with_inline_citations, show_limitations, show_metadata, show_sources, show_grounding_metrics, show_trace
+from utils.UI_rendering import render_confidence_profile, render_sentence_with_inline_citations, show_limitations, show_metadata, show_sources, show_query_expansion, show_trace
 from utils.export import export_output
 # ---------------------------------------------------------------------
 # Page config
@@ -27,45 +27,51 @@ except:
 # ---------------------------------------------------------------------
 # App header
 # ---------------------------------------------------------------------
-st.title("🌱 Environmental Research Synthesizer")
+# st.title("Energy & Society Research Assistant")
 st.markdown(
-    "Ask an evidence-based research question. "
-    "Answers are synthesized **only** from the underlying academic sources."
+    "<h1 style='font-size: 2.6rem;'>Energy & Society Research Assistant</h1>",
+    unsafe_allow_html=True
 )
+
+st.markdown("""
+
+Ask a research question about the social impacts of the energy transition.  
+Answers are generated strictly from academic sources, and the system abstains when evidence is insufficient.
+""")
 
 # ---------------------------------------------------------------------
 # Example queries
 # ---------------------------------------------------------------------
 st.markdown("<br>", unsafe_allow_html=True)
-st.markdown("💡 Try an example query:")
+with st.expander("💡 Try an example query", expanded=False):
 
-example_queries = [
-    "What are the costs and benefits of renewable energy adoption?",
-    "How do ownership models shape social outcomes of renewable projects?",
-    "What is the impact of energy transition on the labour market?",
-    "How do political views affect the opinions on renewable energy?",
-    "What is the societal response to renewable energy projects?",
-    "Which social groups are most affected by renewable energy projects?"
-]
+    example_queries = [
+        "What are the costs and benefits of renewable energy adoption?",
+        "How do ownership models shape social outcomes of renewable projects?",
+        "What is the impact of energy transition on the labour market?",
+        "How do political views affect the opinions on renewable energy?",
+        "What is the societal response to renewable energy projects?",
+        "Which social groups are most affected by renewable energy projects?"
+    ]
 
-row1 = example_queries[:3]
-row2 = example_queries[3:]
+    row1 = example_queries[:3]
+    row2 = example_queries[3:]
 
-cols1 = st.columns(3)
-for i, ex in enumerate(row1):
-    if cols1[i].button(ex):
-        st.session_state["question"] = ex
-        if 'answer_placeholder' in st.session_state:
-            st.session_state['answer_placeholder'].empty()
+    cols1 = st.columns(3)
+    for i, ex in enumerate(row1):
+        if cols1[i].button(ex):
+            st.session_state["question"] = ex
+            if 'answer_placeholder' in st.session_state:
+                st.session_state['answer_placeholder'].empty()
 
-cols2 = st.columns(3)
-for i, ex in enumerate(row2):
-    if cols2[i].button(ex):
-        st.session_state["question"] = ex
-        if 'answer_placeholder' in st.session_state:
-            st.session_state['answer_placeholder'].empty()
+    cols2 = st.columns(3)
+    for i, ex in enumerate(row2):
+        if cols2[i].button(ex):
+            st.session_state["question"] = ex
+            if 'answer_placeholder' in st.session_state:
+                st.session_state['answer_placeholder'].empty()
 
-st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------
 # Input
@@ -76,13 +82,13 @@ if 'question' not in st.session_state:
 question = st.text_area(
     "Research question",
     value=st.session_state['question'],
-    placeholder="Write your question here…",
+    placeholder="Write your query here…",
 )
 
 topk_faiss = 30
 topk_bm25 = 30
 
-ask_button = st.button("Ask")
+ask_button = st.button("Submit")
 
 # ---------------------------------------------------------------------
 # Trigger backend call (button ONLY sets state)
@@ -91,7 +97,7 @@ answer_placeholder = st.empty()
 
 if ask_button:
     if not question.strip():
-        st.warning("Please enter a question before clicking Ask.")
+        st.warning("Please enter a question before clicking Submit.")
     
     else:
         # answer_placeholder.empty()  
@@ -129,20 +135,20 @@ if data:
         if pipeline_status != "success":
             show_limitations(data, level="error")
             show_metadata(data)
-            show_trace(data)
             st.stop()
         
         # ---------------------------------------------------------------------
-        # Other early returns
+        # Early returns
         # ---------------------------------------------------------------------
         confidence = data["confidence"]
 
         if confidence["status"] == "Not applicable":
-            show_limitations(data, level="warning")
+            if confidence["reason"] == "Absent evidence":
+                show_limitations(data, case="absent_evidence")
+            elif confidence["reason"] == "Abstention":
+                show_limitations(data, case="abstention")
             show_metadata(data)
-            # if data.get("evidence_structure", {}):
-            #     with st.expander("Evidence distribution", expanded=False):
-            #         st.json(data.get("evidence_structure", {})) 
+            show_query_expansion(data)
             show_trace(data)
             st.stop()
 
@@ -181,19 +187,12 @@ if data:
         show_metadata(data)
 
         # ---------------------------------------------------------------------
-        # Evidence Metrics
+        # Query expansion
         # ---------------------------------------------------------------------
-        # if data.get("evidence_structure", {}):
-        #     with st.expander("Evidence distribution", expanded=False):
-        #         st.json(data.get("evidence_structure", {}))            
+        show_query_expansion(data)       
 
         # ---------------------------------------------------------------------
-        # Grounding Metrics
-        # ---------------------------------------------------------------------
-        # show_grounding_metrics(data)
-
-        # ---------------------------------------------------------------------
-        # Debug panel (sidebar-controlled)
+        # Trace panel (sidebar-controlled)
         # ---------------------------------------------------------------------
         show_trace(data)
 

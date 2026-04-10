@@ -9,24 +9,38 @@ class HFEmbedding:
     
     _model_cache = {}
 
-    def __init__(self, model: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model: str = "all-MiniLM-L6-v2", device=None):
         from sentence_transformers import SentenceTransformer
-        
+        import torch
+
         self.model_name = model
 
-        if model not in HFEmbedding._model_cache:
-            HFEmbedding._model_cache[model] = SentenceTransformer(model)
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = device
 
+        if model not in HFEmbedding._model_cache:
+            HFEmbedding._model_cache[model] = SentenceTransformer(
+                model,
+                device=self.device
+            )
+            
         self.model = HFEmbedding._model_cache[model]
 
+
     def __call__(self, texts):
+        
+        if not texts:
+            return np.array([])
+
         if isinstance(texts, str):
             texts = [texts]
 
         return self.model.encode(
             texts,
             convert_to_numpy=True,
-            show_progress_bar=False
+            show_progress_bar=False,
+            normalize_embeddings=True
         )
 
 
@@ -49,6 +63,9 @@ class OpenAIEmbedding:
             raise ValueError("No OpenAI API key found.")
         
         client = OpenAI(api_key=key)
+
+        if not texts:
+            return np.array([])
 
         if isinstance(texts, str):
             texts = [texts]

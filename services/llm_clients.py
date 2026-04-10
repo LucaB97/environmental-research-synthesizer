@@ -41,7 +41,7 @@ class HFClient(BaseLLMClient):
 
     def __init__(
         self,
-        model_name="google/flan-t5-base",
+        model_name="mistralai/Mistral-7B-Instruct-v0.2",
         max_tokens=400,
         temperature=0.2,
         device=None,
@@ -59,6 +59,9 @@ class HFClient(BaseLLMClient):
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
+
+        print(f"[HFClient] Model: {model_name}")
+        print(f"[HFClient] Device: {self.device}")
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 

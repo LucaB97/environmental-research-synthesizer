@@ -28,7 +28,7 @@ def load_system(app):
         raise ValueError(f"Invalid profile: {profile}")
 
     config = DEFAULT_CONFIG
-
+    
     artifacts = initialize_system(config)
 
     metadata_path = artifacts["metadata_path"]
@@ -54,10 +54,10 @@ def load_system(app):
 
     # ---- LLM selection ----
     if profile == "public":
-        llm = OpenAIClient()
+        llm = OpenAIClient(model_name=os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
     elif profile == "gpu":
         llm = HFClient(
-            "mistralai/Mistral-7B-Instruct-v0.2",
+            model_name=os.getenv("HF_MODEL_GPU", "mistralai/Mistral-7B-Instruct-v0.2"),
             load_in_4bit=True
         )
 
@@ -74,7 +74,8 @@ def load_system(app):
         scope_classifier=scope_classifier,
         retriever=retriever,
         relevance_profiler=relevance_profiler,
-        tuned_parameters=params,
+        topN = config.topN,
+        params=params,
         query_expander=query_expander,
         synthesizer=synthesizer
     )

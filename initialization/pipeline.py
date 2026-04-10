@@ -18,7 +18,7 @@ def initialize_system(config: InitializationConfig):
 
     chunks_path = data_dir / f"chunks_{config.chunk_size}t_{config.overlap}o.json"
     index_path = data_dir / f"faiss_{config.embedding}_{config.chunk_size}t_{config.overlap}o.index"
-    params_path = data_dir / f"parameters_{config.embedding}_{config.chunk_size}t_{config.overlap}o.json"
+    params_path = data_dir / f"parameters_{config.embedding}_{config.chunk_size}t_{config.overlap}o_{config.topN}N.json"
 
     # --- Step 1: extraction ---
     if not chunks_path.exists():

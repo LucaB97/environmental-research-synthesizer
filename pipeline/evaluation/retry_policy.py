@@ -79,10 +79,7 @@ def reason_retry_grounding(metrics):
     # 3. No cross-source use despite diversity
     # -----------------------------------------
     if (
-        metrics["available_papers"] > 3
-        and metrics["multi_source_sentence_ratio"] == 0
-        and metrics["used_papers"] >= 3
-    ):
+        metrics["available_papers"] > 3 and metrics["multi_source_sentence_ratio"] == 0):
         failures["no_corroboration"] = 0.75
     
     if not failures:

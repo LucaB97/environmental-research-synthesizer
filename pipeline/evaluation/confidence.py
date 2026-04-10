@@ -48,7 +48,7 @@ def evaluate_semantic_alignment(chunks, params, top_N):
 
     norm_max = semantic_norm(max_score, a, b)
     norm_mean = semantic_norm(mean_score_topN, a, b)
-    semantic_alignment = 0.7 * norm_max + 0.3 * norm_mean
+    semantic_alignment = 0.5 * norm_max + 0.5 * norm_mean
 
     return semantic_alignment
 
@@ -59,15 +59,15 @@ def explain_semantic(semantic_alignment):
     """
 
     if semantic_alignment < 0.25:
-        return "Most retrieved passages are marginally or not related to the query"
+        return "Top retrieved passages show little relevance to the query"
     
     elif semantic_alignment < 0.5: 
-        return "Some retrieved passages are relevant, but coverage of the query is inconsistent"
+        return "Some top passages are relevant, but alignment with the query is inconsistent"
 
     elif semantic_alignment < 0.75:
-        return "Retrieved passages are generally relevant to the query"
+        return "Top passages are generally relevant to the query"
     
-    return "Retrieved passages closely align with the query"
+    return "Top passages closely match the query"
 
 
 def evaluate_evidence_structure(chunks, params):
@@ -194,12 +194,12 @@ def explain_evidence(metrics, flags):
     density_bullet = "Evidence density — " + f"{metrics['evidence density']}\n"
     
     if flags.get("high_density"):
-        density_bullet += "A substantial amount of relevant evidence was retrieved"
+        density_bullet += "A substantial amount of relevant evidence was identified"
 
     elif flags.get("low_density"):
         density_bullet += "Only a limited amount of relevant evidence was identified"
     else:
-        density_bullet += "A moderate amount of relevant evidence was retrieved"
+        density_bullet += "A moderate amount of relevant evidence was identified"
 
 
     diversity_bullet = "Source diversity — " + f"{metrics['source diversity']}\n"

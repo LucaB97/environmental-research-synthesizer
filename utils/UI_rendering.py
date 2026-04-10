@@ -121,12 +121,12 @@ def render_confidence_profile(confidence):
 
     col1, col2, col3 = st.columns(3, gap="large")
     semantic_caption = "How closely the top retrieved passages match the query"
-    evidence_caption = "How much relevant evidence appears among the top passages"
+    evidence_caption = "How much relevant evidence is retrieved and how it is distributed"
     grounding_caption = "How well the answer integrates and balances the cited evidence"
 
     # ---- Semantic alignment ----
     with col1:
-        semantic_tooltip = format_explanation(semantic["explanation"])
+        # semantic_tooltip = format_explanation(semantic["explanation"])
 
         st.markdown(f"""
         <div class="confidence-metric">
@@ -137,10 +137,7 @@ def render_confidence_profile(confidence):
                 {semantic_caption}
             </div>
             <div class="metric-value">
-                {semantic['score']:.2f}
-                <span class="tooltip">ⓘ
-                    <span class="tooltiptext">{semantic_tooltip}</span>
-                </span>    
+                {semantic['score']:.2f}  
             </div>
             <div class="confidence-level"
                  style="color:{level_colors[semantic['level']]}">
@@ -226,14 +223,29 @@ def render_sentence_with_inline_citations(item, citation_style: CitationStyle):
 
 ### Limitations
 
-def show_limitations(data, level=None):
+def show_limitations(data, case=None):
     limitations = data.get("limitations", [])
-    for lim in limitations:
-        if level == "error":
+    
+    if case == "error":
+        for lim in limitations:
             st.error(lim)
-        elif level == "warning":
+    
+    elif case == "scope":
+        for lim in limitations:
             st.warning(lim)
-        else:
+
+    elif case == "absent_evidence":
+        for lim in limitations:
+            st.info(lim)
+    
+    elif case == "abstention":
+        st.info("The system abstained from answering because the available evidence was insufficient to support a reliable synthesis.")
+        with st.expander("Evidence assessment details"):
+            for lim in limitations:
+                st.markdown(f"{lim}")
+    
+    else:
+        for lim in limitations:
             st.write(f"{lim}")
 
 
@@ -304,9 +316,18 @@ def show_grounding_metrics(metrics):
                 "Multi-source sentences",
                 f"{metrics.get('multi_source_sentence_ratio', 0):.0%}"
             )
+
+
+### Query expansion
+def show_query_expansion(data):
+    trace = data.get("trace")
+    query_expansion = trace.get("query_expansion", None)
     
-    else:
-        st.info("Grounding metrics are unavailable for this response.")
+    if query_expansion:
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.expander("How the system searched", expanded=False):
+            st.markdown(f"- \"{query_expansion[0]}\"\n")
+            st.markdown(f"- \"{query_expansion[1]}\"")
 
 ### Trace
 
@@ -318,16 +339,6 @@ def show_trace(data):
     
     if trace and show_trace:
         st.markdown("---")
-        
-        ## Query expansion
-        query_expansion = trace.get("query_expansion", None)
-        
-        if query_expansion:
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.subheader("Query expansion")
-            st.markdown(f"**Original query:**\n{query_expansion[0]}")
-            st.markdown(f"**Expanded query:**\n{query_expansion[1]}")
-
 
         ## Grounding metrics
         metrics = trace.get("grounding_metrics", [])

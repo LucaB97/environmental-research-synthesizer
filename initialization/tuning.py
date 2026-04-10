@@ -9,49 +9,59 @@ from pipeline.evaluation.confidence import semantic_norm, compute_contribution
 
 
 QUERIES = [
-    "Social acceptance of community wind projects in areas with low electricity demand",
-    "Effects of minor policy changes on household energy literacy programs",
-    "Participation of informal local groups in renewable energy initiatives",
-    "Influence of neighborhood social networks on adoption of solar panels in small towns",
-    "Energy poverty considerations in communities with high off-grid adoption",
-    "Challenges of promoting energy literacy in transient communities",
-    "Influence of minor local regulations on small-scale renewable energy projects",
-    "Participation of volunteers in energy transition awareness campaigns in sparsely populated regions",
+    # --- General / high-recall (anchors) ---
+    "Renewable energy adoption barriers",
+    "Community response to wind energy",
+    "Solar panel adoption factors",
+    "Energy poverty and policy",
+    "Public perception of renewable energy",
+    "Community engagement in renewable energy projects",
 
-    "Household affordability and adoption of solar energy in low-income communities",
+    # --- Realistic user queries (core calibration set) ---
+    "Social acceptance of community wind projects",
+    "Impact of policy changes on energy literacy programs",
+    "Participation of local groups in renewable energy initiatives",
+    "Influence of social networks on adoption of solar panels",
+    "Energy poverty considerations in renewable energy transitions",
+    "Challenges in promoting energy literacy",
+    "Impact of local regulations on renewable energy projects",
+    "Volunteer involvement in energy transition awareness campaigns",
+
+    "Household affordability and adoption of solar energy",
     "Community engagement strategies in renewable energy projects",
-    "Public attitudes toward wind farms in semi-urban areas",
-    "Energy literacy programs for promoting energy efficiency",
+    "Public attitudes toward wind farms",
+    "Energy literacy programs for energy efficiency",
     "Distributional effects of subsidies for residential solar panels",
-    "Trust in local authorities influencing renewable energy adoption",
-    "Equity in decision-making for local renewable energy projects",
-    "Economic well-being effects of community-owned renewable energy initiatives",
-    "Public perception of renewable energy policies in minority communities",
-    "Participation of local stakeholders in planning renewable energy infrastructure",
-    "Community engagement in microgrid implementation projects",
-    "Impact of gender dynamics on participation in renewable energy cooperatives",
-    "Effect of municipal communication strategies on local renewable energy awareness",
-    
-    "Effectiveness of participatory decision-making on social acceptance of onshore wind projects",
-    "Impact of targeted energy literacy programs on adoption of household solar PV in disadvantaged neighborhoods",
-    "Relationship between energy poverty alleviation and distributed renewable energy schemes in rural communities",
-    "Role of trust in institutions on equitable energy transition outcomes",
-    "Influence of social norms on community investment in renewable energy cooperatives",
-    "Governance frameworks supporting minority inclusion in renewable energy projects",
-    "Effectiveness of participatory governance in achieving equitable renewable energy outcomes",
-    "Role of social norms and trust in accelerating community-owned solar adoption",
-    "Relationship between energy poverty alleviation and inclusive policy design in rural renewable energy programs"
-    ]
+    "Trust in local authorities and renewable energy adoption",
+    "Equity in decision-making for renewable energy projects",
+    "Economic effects of community-owned renewable energy initiatives",
+    "Community engagement in microgrid projects",
+    "Gender dynamics in renewable energy participation",
+    "Impact of communication strategies on renewable energy awareness",
+
+    # --- Moderately complex (keep some structure) ---
+    "Participatory decision-making and social acceptance of wind projects",
+    "Impact of energy literacy programs on solar adoption",
+    "Energy poverty alleviation and renewable energy in rural communities",
+    "Trust in institutions and energy transition outcomes",
+    "Social norms and investment in renewable energy cooperatives",
+    "Inclusion in renewable energy governance",
+    "Participatory governance and equitable energy outcomes",
+
+    # --- Slightly harder / edge (limited but useful) ---
+    "Social norms and trust in community solar adoption",
+    "Energy poverty and inclusive policy design in renewable energy programs"
+]
 
 
-def normalization_params(queries, retriever, relevance_profiler, parameters):
+def normalization_params(queries, parameters, retriever, relevance_profiler, topN):
 
     all_scores = []
 
     for i, q in enumerate(queries):
         retrieved_chunks = retriever.search(q, topk_faiss=30, topk_bm25=30)
         reranked_chunks = relevance_profiler.rerank(q, retrieved_chunks)
-        scores = [chunk["final_score"] for chunk in reranked_chunks[:15]]
+        scores = [chunk["final_score"] for chunk in reranked_chunks[:topN]]
         all_scores.extend(scores)
 
     all_scores = np.array(all_scores)
@@ -69,7 +79,7 @@ def normalization_params(queries, retriever, relevance_profiler, parameters):
     return parameters
 
 
-def contribution_quantiles(queries, retriever, relevance_profiler, parameters, alpha):
+def contribution_quantiles(queries, parameters, retriever, relevance_profiler, topN, alpha):
 
     a,b, std_global = (parameters["normalization_params"]["a"], 
                        parameters["normalization_params"]["b"], 
@@ -82,7 +92,7 @@ def contribution_quantiles(queries, retriever, relevance_profiler, parameters, a
         retrieved_chunks = retriever.search(q, topk_faiss=30, topk_bm25=30)
         reranked_chunks = relevance_profiler.rerank(q, retrieved_chunks)
         
-        relevant_chunks = reranked_chunks[:15]
+        relevant_chunks = reranked_chunks[:topN]
         scores = np.array([chunk["final_score"] for chunk in relevant_chunks])    
         mean_score, std_score = scores.mean(), scores.std()
 
@@ -116,7 +126,7 @@ def contribution_quantiles(queries, retriever, relevance_profiler, parameters, a
     return parameters
 
 
-def effective_sources_quantiles(queries, retriever, relevance_profiler, parameters, alpha):
+def effective_sources_quantiles(queries, parameters, retriever, relevance_profiler, topN, alpha):
 
     a,b, std_global, min_contribution = (parameters["normalization_params"]["a"], 
                                          parameters["normalization_params"]["b"], 
@@ -129,7 +139,7 @@ def effective_sources_quantiles(queries, retriever, relevance_profiler, paramete
         retrieved_chunks = retriever.search(q, topk_faiss=30, topk_bm25=30)
         reranked_chunks = relevance_profiler.rerank(q, retrieved_chunks)
         
-        relevant_chunks = reranked_chunks[:15]
+        relevant_chunks = reranked_chunks[:topN]
         paper_ids = [c["paper_id"] for c in relevant_chunks]
         scores = np.array([chunk["final_score"] for chunk in relevant_chunks])    
         mean_score, std_score, max_score = scores.mean(), scores.std(), scores.max()
@@ -181,9 +191,9 @@ def run_tuning(config, chunks_path, index_path, params_path):
     relevance_profiler = RelevanceProfiler()
     
     parameters = {}
-    parameters = normalization_params(QUERIES, retriever, relevance_profiler, parameters)
-    parameters = contribution_quantiles(QUERIES, retriever, relevance_profiler, parameters, alpha=0.5)
-    parameters = effective_sources_quantiles(QUERIES, retriever, relevance_profiler, parameters, alpha=0.5)
+    parameters = normalization_params(QUERIES, parameters, retriever, relevance_profiler, config.topN)
+    parameters = contribution_quantiles(QUERIES, parameters, retriever, relevance_profiler, config.topN, alpha=0.5)
+    parameters = effective_sources_quantiles(QUERIES, parameters, retriever, relevance_profiler, config.topN, alpha=0.5)
 
     with open(params_path, "w", encoding="utf-8") as f:
         json.dump(parameters, f, indent=2)

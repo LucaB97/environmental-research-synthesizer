@@ -9,7 +9,6 @@ from utils.chunking import deduplicate
 from .evaluation.evidence_analysis import aggregate_evidence, extract_sentence_paper_ids, compute_grounding_metrics
 from .evaluation.confidence import evaluate_semantic_alignment, evaluate_evidence_structure, evaluate_grounding_quality, evaluate_confidence_profile
 from .evaluation.retry_policy import need_retry_semantic, reason_retry_grounding
-from .postprocessing.limitations import assign_limitations
 from .postprocessing.response_builder import build_query_response
 
 from schemas.request import QueryRequest
@@ -23,7 +22,8 @@ class RAGPipeline:
         scope_classifier,
         retriever,
         relevance_profiler,
-        tuned_parameters,
+        topN,
+        params,
         query_expander,
         synthesizer
     ):
@@ -31,7 +31,8 @@ class RAGPipeline:
         self.scope_classifier = scope_classifier
         self.retriever = retriever
         self.relevance_profiler = relevance_profiler
-        self.params = tuned_parameters
+        self.topN = topN
+        self.params = params
         self.query_expander = query_expander
         self.synthesizer = synthesizer
 
@@ -39,6 +40,7 @@ class RAGPipeline:
     def initialize_output_meta(self):
 
         return {
+            "total_time_sec": None,
             "scope": {
                 "decision": "in_scope"
             },
@@ -86,7 +88,6 @@ class RAGPipeline:
                 },
                 "chunks_selected": None,
                 "synthesis_time_sec": None,
-                "total_time_sec": None
             }
         }
     
@@ -98,7 +99,6 @@ class RAGPipeline:
         meta = self.initialize_output_meta()
         
         pipeline_status = "success"
-        top_N = 15
         #
         # --- Zero-shot classification of scope---
         #
@@ -106,9 +106,9 @@ class RAGPipeline:
 
         if not self.scope_classifier.is_in_scope(query, SCOPE_CLASSIFIER_PROMPT):
             pipeline_status = "out_of_scope"
-            limitations = ["The question cannot be answered from the available sources"]
+            limitations = ["This query is outside the scope of the system"]
             meta["scope"] = "out_of_scope"
-            confidence_profile = evaluate_confidence_profile(pipeline_status, reason="Early termination because the question is out of scope")
+            confidence_profile = evaluate_confidence_profile(pipeline_status, reason="Out of scope")
             return build_query_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile)
 
         #
@@ -132,7 +132,7 @@ class RAGPipeline:
         if not retrieved_chunks:
             pipeline_status = "retrieval_failed"
             limitations = ["No documents could be retrieved for this question"]
-            confidence_profile = evaluate_confidence_profile(pipeline_status, reason="Early termination because no evidence was retrieved")
+            confidence_profile = evaluate_confidence_profile(pipeline_status, reason="Empty retrieval")
             return build_query_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile)
 
         #
@@ -144,9 +144,9 @@ class RAGPipeline:
 
         meta["profiling"]["profiling_time_sec"] = round(profiling_time, 3)
 
-        semantic_alignment = evaluate_semantic_alignment(reranked_chunks, self.params, top_N)
+        semantic_alignment = evaluate_semantic_alignment(reranked_chunks, self.params, self.topN)
         
-        evidence_structure, evidence_flags, evidence_meta = evaluate_evidence_structure(reranked_chunks[:top_N], self.params)
+        evidence_structure, evidence_flags, evidence_meta = evaluate_evidence_structure(reranked_chunks[:self.topN], self.params)
 
         #
         # --- Retrieval retry ---
@@ -176,7 +176,7 @@ class RAGPipeline:
                 if not retrieved_chunks:
                     pipeline_status = "retrieval_failed"
                     limitations = ["No documents could be retrieved for this question"]
-                    confidence_profile = evaluate_confidence_profile(pipeline_status, reason="Early termination because no evidence was retrieved")
+                    confidence_profile = evaluate_confidence_profile(pipeline_status, reason="Empty retrieval")
                     trace={"query_expansion": queries}
                     return build_query_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile, trace=trace)
                 
@@ -185,29 +185,30 @@ class RAGPipeline:
                 profiling_time += time.perf_counter() - t1
                 meta["profiling"]["profiling_time_sec"] = round(profiling_time, 3)
 
-                semantic_alignment = evaluate_semantic_alignment(reranked_chunks, self.params, top_N)
+                semantic_alignment = evaluate_semantic_alignment(reranked_chunks, self.params, self.topN)
         
-                evidence_structure, evidence_flags, evidence_meta = evaluate_evidence_structure(reranked_chunks[:top_N], self.params)
+                evidence_structure, evidence_flags, evidence_meta = evaluate_evidence_structure(reranked_chunks[:self.topN], self.params)
 
         #
         # --- Early returns ---
         #
 
-        if semantic_alignment < 0.25 or evidence_flags["absent"]:
-            limitations=assign_limitations(semantic_alignment, absent=evidence_flags["absent"])
+        if evidence_flags["absent"]:
+            limitations=["The retrieved evidence is too narrow to support synthesis across studies"]
             confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_meta, evidence_flags, 
-                                                             reason="Grounding score is absent because synthesis was not performed")
+                                                             reason="Absent evidence")
             trace={
                 "query_expansion": queries,
+                "evidence_distribution": evidence_meta,
                 }
             return build_query_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile, trace=trace)   
 
         #
         # --- Synthesis ---
         #    
-        meta["synthesis"]["chunks_selected"] = top_N
+        meta["synthesis"]["chunks_selected"] = self.topN
 
-        provided_chunks = reranked_chunks[:top_N]
+        provided_chunks = reranked_chunks[:self.topN]
 
         for c in provided_chunks:
             c_metadata = self.metadata.loc[c["paper_id"]]
@@ -254,17 +255,13 @@ class RAGPipeline:
                 limitations = synthesis_output.get("limitations") or ["No meaningful answer could be produced from the available literature"]
 
                 meta["synthesis"]["synthesis_time_sec"] = round(synthesis_time, 3)
-                meta["synthesis"]["total_time_sec"] = round(total_time, 3)
-
-                # if attempt > 1:
-                #     meta["synthesis"]["synthesis_retry"]["attempted"] = attempt>1
-                #     meta["synthesis"]["synthesis_retry"]["total_attempts"] = attempt
-                #     meta["synthesis"]["synthesis_retry"]["retry_triggers"] = retry_triggers
+                meta["total_time_sec"] = round(total_time, 3)
 
                 confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_meta, evidence_flags, 
-                                                                reason="Grounding score is absent because the synthesizer abstained from synthesis")
+                                                                reason="Abstention")
                 trace={
                 "query_expansion": queries,
+                "evidence_distribution": evidence_meta,
                 }
                 return build_query_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile, trace=trace)   
 
@@ -314,7 +311,7 @@ class RAGPipeline:
         synthesis_time = time.perf_counter() - t2
         total_time = time.perf_counter() - start_time
         meta["synthesis"]["synthesis_time_sec"] = round(synthesis_time, 3)
-        meta["synthesis"]["total_time_sec"] = round(total_time, 3)
+        meta["total_time_sec"] = round(total_time, 3)
         
         # --- Failure fallback ---
         if last_error and not synthesis_output:
@@ -324,7 +321,7 @@ class RAGPipeline:
             meta["errors"]["total_attempts"] = self.synthesizer.max_attempts
             meta["errors"]["last_error"] = str(last_error)
             confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_meta, evidence_flags, 
-                                                            reason="Grounding score is absent because the synthesis generation failed")
+                                                            reason="Generation error")
             return build_query_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile)  
 
         #
@@ -343,6 +340,7 @@ class RAGPipeline:
 
         trace={
             "query_expansion": queries,
+            "evidence_distribution": evidence_meta,
             "grounding_metrics": best_grounding_metrics,
             "chunks_provided_to_synthesizer": best_aggregation["chunks"],
             "paper_stats": [
