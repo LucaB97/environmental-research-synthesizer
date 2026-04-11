@@ -319,15 +319,15 @@ def show_grounding_metrics(metrics):
 
 
 ### Query expansion
-def show_query_expansion(data):
-    trace = data.get("trace")
-    query_expansion = trace.get("query_expansion", None)
+def show_queries(data):
+    trace = data.get("trace", {})
+    queries = trace.get("queries", [])
     
-    if query_expansion:
+    if queries:
         st.markdown("<br>", unsafe_allow_html=True)
         with st.expander("How the system searched", expanded=False):
-            st.markdown(f"- \"{query_expansion[0]}\"\n")
-            st.markdown(f"- \"{query_expansion[1]}\"")
+            for q in queries:
+                st.markdown(f"- \"{q}\"\n")
 
 ### Trace
 

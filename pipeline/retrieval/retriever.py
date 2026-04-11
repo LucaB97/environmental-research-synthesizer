@@ -1,7 +1,7 @@
 import faiss
 import re
 from rank_bm25 import BM25Okapi
-
+import spacy
 
 
 class SemanticRetriever:
@@ -48,14 +48,23 @@ class SemanticRetriever:
 
 
 class BM25Retriever:
-    def __init__(self, chunks):
+    def __init__(self, chunks, normalizer=None):
+        
+        if normalizer:
+            if not hasattr(normalizer, "normalize"):
+                raise ValueError("normalizer must implement a .normalize(text) method")
+            
         self.chunks = chunks
-        self.tokenized_corpus = [self.tokenize(c["text"]) for c in chunks]
+        self.normalizer = normalizer
+
+        self.tokenized_corpus = [
+            self.tokenize(c["text"]) for c in chunks
+        ]
         self.bm25 = BM25Okapi(self.tokenized_corpus)
 
-    def tokenize(self, text):
-        text = text.lower()
-        text = re.sub(r"\W+", " ", text)
+    def tokenize(self, text: str):
+        if self.normalizer:
+            text = self.normalizer.normalize(text)
         return text.split()
 
     def search(self, query, top_k=10):
@@ -84,9 +93,13 @@ class HybridRetriever:
         self.semantic_retriever = semantic_retriever
         self.bm25_retriever = bm25_retriever
 
-    def search(self, query, topk_faiss=30, topk_bm25=30):
+    def search(self, query, norm_query=None, topk_faiss=30, topk_bm25=30):
         faiss_results = self.semantic_retriever.search(query, topk_faiss)
-        bm25_results = self.bm25_retriever.search(query, topk_bm25)
+        
+        if norm_query is not None:
+            bm25_results = self.bm25_retriever.search(norm_query, topk_bm25)
+        else:
+            bm25_results = self.bm25_retriever.search(query, topk_bm25)
 
         combined = {}
 

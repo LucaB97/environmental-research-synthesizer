@@ -1,6 +1,7 @@
 import pandas as pd
 import time
 import logging
+import json
 
 from utils.prompt import SCOPE_CLASSIFIER_PROMPT, QUERY_EXPANDER_PROMPT, TASK_HEADER, CORE_SYNTHESIS_INSTRUCTIONS, RETRY_PROMPTS
 from utils.citations import build_citation_index, build_sources, CitationStyle, FORMATTERS, resolve_answer_citations, remove_citations_inside_text 
@@ -20,6 +21,7 @@ class RAGPipeline:
         self,
         metadata,
         scope_classifier,
+        normalizer,
         retriever,
         relevance_profiler,
         topN,
@@ -29,6 +31,7 @@ class RAGPipeline:
     ):
         self.metadata = metadata
         self.scope_classifier = scope_classifier
+        self.normalizer = normalizer
         self.retriever = retriever
         self.relevance_profiler = relevance_profiler
         self.topN = topN
@@ -102,24 +105,29 @@ class RAGPipeline:
         #
         # --- Zero-shot classification of scope---
         #
-        query = request.question
+        user_query = request.question
 
-        if not self.scope_classifier.is_in_scope(query, SCOPE_CLASSIFIER_PROMPT):
+        if not self.scope_classifier.is_in_scope(user_query, SCOPE_CLASSIFIER_PROMPT):
             pipeline_status = "out_of_scope"
             limitations = ["This query is outside the scope of the system"]
             meta["scope"] = "out_of_scope"
             confidence_profile = evaluate_confidence_profile(pipeline_status, reason="Out of scope")
-            return build_query_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile)
+            return build_query_response(user_query, pipeline_status, limitations, meta=meta, confidence=confidence_profile)
 
         #
         # --- Retrieval ---
         #
+        if self.normalizer:
+            norm_query = self.normalizer.normalize(user_query)
+        else:
+            norm_query = None
+
         topk_faiss, topk_bm25 = request.topk_faiss, request.topk_bm25
         query_expansion = False
-        queries = None
+        queries = [user_query]
 
         t0 = time.perf_counter()
-        retrieved_chunks = self.retriever.search(query, topk_faiss=topk_faiss, topk_bm25=topk_bm25)
+        retrieved_chunks = self.retriever.search(user_query, norm_query, topk_faiss=topk_faiss, topk_bm25=topk_bm25)
         retrieval_time = time.perf_counter() - t0
         
         meta["retrieval"]["retriever_info"]["semantic"]["chunks_requested"] = topk_faiss
@@ -133,21 +141,25 @@ class RAGPipeline:
             pipeline_status = "retrieval_failed"
             limitations = ["No documents could be retrieved for this question"]
             confidence_profile = evaluate_confidence_profile(pipeline_status, reason="Empty retrieval")
-            return build_query_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile)
+            trace = {
+                "queries": queries
+            }
+            return build_query_response(user_query, pipeline_status, limitations, meta=meta, confidence=confidence_profile)
 
         #
         # --- Reranking & Profiling ---
         #
         t1 = time.perf_counter()
-        reranked_chunks = self.relevance_profiler.rerank(query, retrieved_chunks)
+        reranked_chunks = self.relevance_profiler.rerank(user_query, retrieved_chunks)
         profiling_time = time.perf_counter() - t1
 
         meta["profiling"]["profiling_time_sec"] = round(profiling_time, 3)
 
         semantic_alignment = evaluate_semantic_alignment(reranked_chunks, self.params, self.topN)
-        
+        print(semantic_alignment)
         evidence_structure, evidence_flags, evidence_meta = evaluate_evidence_structure(reranked_chunks[:self.topN], self.params)
-
+        print(semantic_alignment)
+        print(evidence_flags)
         #
         # --- Retrieval retry ---
         #
@@ -157,13 +169,22 @@ class RAGPipeline:
             if not query_expansion:
 
                 query_expansion = True
-                expanded_query = self.query_expander.produce_expansion(query, QUERY_EXPANDER_PROMPT)
-                queries = [query, expanded_query]
+                expanded_queries = self.query_expander.produce_expansion(user_query, QUERY_EXPANDER_PROMPT)
+                if isinstance(expanded_queries, str):
+                    expanded_queries = json.loads(expanded_queries)
+                
+                if isinstance(expanded_queries, list):
+                    queries = [user_query] + expanded_queries[:3]            
+                
                 retrieved_chunks = []
 
                 t0 = time.perf_counter()
                 for q in queries:
-                    retrieved_chunks.extend(self.retriever.search(q, topk_faiss=topk_faiss, topk_bm25=topk_bm25))
+                    if self.normalizer:
+                        norm_q = self.normalizer.normalize(q)
+                    else:
+                        norm_q = None
+                    retrieved_chunks.extend(self.retriever.search(q, norm_q, topk_faiss=topk_faiss, topk_bm25=topk_bm25))
                 retrieval_time += time.perf_counter() - t0
                 
                 retrieved_chunks = deduplicate(retrieved_chunks)
@@ -177,16 +198,17 @@ class RAGPipeline:
                     pipeline_status = "retrieval_failed"
                     limitations = ["No documents could be retrieved for this question"]
                     confidence_profile = evaluate_confidence_profile(pipeline_status, reason="Empty retrieval")
-                    trace={"query_expansion": queries}
-                    return build_query_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile, trace=trace)
+                    trace={"queries": queries}
+                    return build_query_response(user_query, pipeline_status, limitations, meta=meta, confidence=confidence_profile, trace=trace)
                 
                 t1 = time.perf_counter()
-                reranked_chunks = self.relevance_profiler.rerank(query, retrieved_chunks)
+                reranked_chunks = self.relevance_profiler.rerank(user_query, retrieved_chunks)
                 profiling_time += time.perf_counter() - t1
                 meta["profiling"]["profiling_time_sec"] = round(profiling_time, 3)
 
                 semantic_alignment = evaluate_semantic_alignment(reranked_chunks, self.params, self.topN)
-        
+                print(semantic_alignment)
+                
                 evidence_structure, evidence_flags, evidence_meta = evaluate_evidence_structure(reranked_chunks[:self.topN], self.params)
 
         #
@@ -198,10 +220,10 @@ class RAGPipeline:
             confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_meta, evidence_flags, 
                                                              reason="Absent evidence")
             trace={
-                "query_expansion": queries,
+                "queries": queries,
                 "evidence_distribution": evidence_meta,
                 }
-            return build_query_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile, trace=trace)   
+            return build_query_response(user_query, pipeline_status, limitations, meta=meta, confidence=confidence_profile, trace=trace)   
 
         #
         # --- Synthesis ---
@@ -224,7 +246,7 @@ class RAGPipeline:
             for c in provided_chunks
         }
 
-        max_attempts = 3
+        max_attempts = 2
         attempt = 0
         synthesis_output = None
         best_output, best_score = None, -1
@@ -239,7 +261,7 @@ class RAGPipeline:
             attempt += 1
             
             try:
-                synthesis_output = self.synthesizer.synthesize(query, provided_chunks, prompt)
+                synthesis_output = self.synthesizer.synthesize(user_query, provided_chunks, prompt)
             except ValueError as e:
                 last_error = e
                 logger.error("Synthesis failed after retries", exc_info=e)
@@ -260,10 +282,10 @@ class RAGPipeline:
                 confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_meta, evidence_flags, 
                                                                 reason="Abstention")
                 trace={
-                "query_expansion": queries,
+                "queries": queries,
                 "evidence_distribution": evidence_meta,
                 }
-                return build_query_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile, trace=trace)   
+                return build_query_response(user_query, pipeline_status, limitations, meta=meta, confidence=confidence_profile, trace=trace)   
 
             ## Evidence metrics
             sentence_papers = extract_sentence_paper_ids(synthesis_output["answer"], source_lookup)
@@ -293,12 +315,12 @@ class RAGPipeline:
             # --- Retry decision ---
             if grounding_score < 0.5 and attempt < max_attempts:
                 retry_reason = reason_retry_grounding(grounding_metrics)
-                retry_triggers.append(retry_reason) 
-                print(f"GROUNDING SCORE: {grounding_score}\nGROUNDING FLAGS: {grounding_flags}\nGROUNDING METRICS: {grounding_metrics}")
+                # print(f"GROUNDING SCORE: {grounding_score}\nMetrics: {grounding_metrics}")
             else:
                 retry_reason = None             
 
             if grounding_metrics and retry_reason and attempt < max_attempts:
+                retry_triggers.append(retry_reason)
                 logger.info(
                     "Retrying synthesis due to weak grounding",
                     extra={"grounding_metrics": grounding_metrics}
@@ -322,7 +344,7 @@ class RAGPipeline:
             meta["errors"]["last_error"] = str(last_error)
             confidence_profile = evaluate_confidence_profile(pipeline_status, semantic_alignment, evidence_structure, evidence_meta, evidence_flags, 
                                                             reason="Generation error")
-            return build_query_response(query, pipeline_status, limitations, meta=meta, confidence=confidence_profile)  
+            return build_query_response(user_query, pipeline_status, limitations, meta=meta, confidence=confidence_profile)  
 
         #
         # --- Output preparation ---
@@ -339,7 +361,7 @@ class RAGPipeline:
         resolved_answer = remove_citations_inside_text(resolved_answer) ## remove references from synthesis text
 
         trace={
-            "query_expansion": queries,
+            "queries": queries,
             "evidence_distribution": evidence_meta,
             "grounding_metrics": best_grounding_metrics,
             "chunks_provided_to_synthesizer": best_aggregation["chunks"],
@@ -349,5 +371,5 @@ class RAGPipeline:
             ]
         }
 
-        return build_query_response(query, pipeline_status, limitations=best_output["limitations"], answer=[Sentence(**s) for s in resolved_answer], 
+        return build_query_response(user_query, pipeline_status, limitations=best_output["limitations"], answer=[Sentence(**s) for s in resolved_answer], 
                             sources=sources, meta=meta, confidence=best_confidence, trace=trace)

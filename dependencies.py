@@ -10,6 +10,7 @@ from services.embeddings import OpenAIEmbedding, HFEmbedding
 from services.indexing import load_faiss
 from services.llm_clients import OpenAIClient, HFClient
 
+from pipeline.preprocessing.normalization import Normalizer
 from pipeline.retrieval.retriever import SemanticRetriever, BM25Retriever, HybridRetriever
 from pipeline.retrieval.reranker import RelevanceProfiler
 from pipeline.llm.scope_classification import QueryScopeClassifier
@@ -50,7 +51,6 @@ def load_system(app):
         embedding_fn = OpenAIEmbedding()
 
     semantic_retriever = SemanticRetriever(index, chunks, embedding_fn)
-    bm25_retriever = BM25Retriever(chunks)
 
     # ---- LLM selection ----
     if profile == "public":
@@ -62,6 +62,15 @@ def load_system(app):
         )
 
     # ---- Core components ----
+    if config.normalize_query_lexical:
+        if config.lemmatize_query_lexical:
+            normalizer = Normalizer()
+        else:
+            normalizer = Normalizer(use_lemmatization=False)
+    else:
+        normalizer = None
+
+    bm25_retriever = BM25Retriever(chunks, normalizer)
     scope_classifier = QueryScopeClassifier(llm)
     retriever = HybridRetriever(semantic_retriever, bm25_retriever)
     relevance_profiler = RelevanceProfiler()
@@ -72,6 +81,7 @@ def load_system(app):
     app.state.pipeline = RAGPipeline(
         metadata=pd.read_csv(metadata_path).set_index("paper_id"),
         scope_classifier=scope_classifier,
+        normalizer=normalizer,
         retriever=retriever,
         relevance_profiler=relevance_profiler,
         topN = config.topN,

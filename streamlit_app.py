@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 from utils.citations import CitationStyle
-from utils.UI_rendering import render_confidence_profile, render_sentence_with_inline_citations, show_limitations, show_metadata, show_sources, show_query_expansion, show_trace
+from utils.UI_rendering import render_confidence_profile, render_sentence_with_inline_citations, show_limitations, show_metadata, show_sources, show_queries, show_trace
 from utils.export import export_output
 # ---------------------------------------------------------------------
 # Page config
@@ -43,34 +43,47 @@ Answers are generated strictly from academic sources, and the system abstains wh
 # Example queries
 # ---------------------------------------------------------------------
 st.markdown("<br>", unsafe_allow_html=True)
-with st.expander("💡 Try an example query", expanded=False):
 
+st.markdown("""
+<style>
+.example-queries div.stButton > button {
+    width: 100%;
+    white-space: normal;
+    border-radius: 10px;
+    border: 1px solid #333;
+    background-color: #1e1e1e;
+    color: white;
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 15px;
+    margin-bottom: 4px;
+    transition: all 0.2s ease-in-out;
+}
+.example-queries div.stButton > button:hover {
+    border: 1px solid #888;
+    background-color: #2a2a2a;
+}
+</style>
+""", unsafe_allow_html=True)
+
+with st.expander("💡 Try an example query", expanded=False):
     example_queries = [
-        "What are the costs and benefits of renewable energy adoption?",
-        "How do ownership models shape social outcomes of renewable projects?",
-        "What is the impact of energy transition on the labour market?",
-        "How do political views affect the opinions on renewable energy?",
-        "What is the societal response to renewable energy projects?",
-        "Which social groups are most affected by renewable energy projects?"
+        "Impact of energy transition on labour market",
+        "Youth engagement in energy transition initiatives",
+        "Gender dynamics in renewable energy participation",
+        "Energy poverty and equity in renewable energy transition",
+        "Impact of political orientations on renewable energy perception",
+        "Economic effects of community-owned renewable energy initiatives"
     ]
 
-    row1 = example_queries[:3]
-    row2 = example_queries[3:]
-
-    cols1 = st.columns(3)
-    for i, ex in enumerate(row1):
-        if cols1[i].button(ex):
+    st.markdown('<div class="example-queries">', unsafe_allow_html=True)
+    
+    for ex in example_queries:
+        if st.button(ex, key=f"example_{ex}"):
             st.session_state["question"] = ex
             if 'answer_placeholder' in st.session_state:
                 st.session_state['answer_placeholder'].empty()
-
-    cols2 = st.columns(3)
-    for i, ex in enumerate(row2):
-        if cols2[i].button(ex):
-            st.session_state["question"] = ex
-            if 'answer_placeholder' in st.session_state:
-                st.session_state['answer_placeholder'].empty()
-
+            
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------
@@ -79,6 +92,7 @@ with st.expander("💡 Try an example query", expanded=False):
 if 'question' not in st.session_state:
     st.session_state['question'] = ""
 
+st.markdown("<br>", unsafe_allow_html=True)
 question = st.text_area(
     "Research question",
     value=st.session_state['question'],
@@ -100,22 +114,20 @@ if ask_button:
         st.warning("Please enter a question before clicking Submit.")
     
     else:
-        # answer_placeholder.empty()  
-
-        with st.spinner("Retrieving evidence and synthesizing answer..."):
-            try:
+        try:
+            with st.spinner("Retrieving evidence and synthesizing answer..."):
                 response = requests.post(
                     API_URL,
                     json={"question": question, "topk_faiss": topk_faiss, "topk_bm25": topk_bm25},
                     timeout=60,
                 )
                 st.session_state["data"] = response.json()
-            except requests.exceptions.Timeout:
-                st.error("⏳ The request timed out. Please try again.")
-                st.stop()
-            except Exception as e:
-                st.error(f"Backend request failed. Please try again.")
-                st.stop()
+        except requests.exceptions.Timeout:
+            st.error("⏳ The request timed out. Please try again.")
+            st.stop()
+        except Exception as e:
+            st.error(f"Backend request failed. Please try again.")
+            st.stop()
 
 data = st.session_state.get("data")
 if data:
@@ -128,12 +140,12 @@ if data:
         pipeline_status = data.get("pipeline_status", "")
 
         if pipeline_status == "out_of_scope":
-            show_limitations(data, level="warning")
+            show_limitations(data, case="scope")
             show_metadata(data)
             st.stop()
 
         if pipeline_status != "success":
-            show_limitations(data, level="error")
+            show_limitations(data, case="error")
             show_metadata(data)
             st.stop()
         
@@ -148,8 +160,7 @@ if data:
             elif confidence["reason"] == "Abstention":
                 show_limitations(data, case="abstention")
             show_metadata(data)
-            show_query_expansion(data)
-            show_trace(data)
+            show_queries(data)
             st.stop()
 
         # ---------------------------------------------------------------------
@@ -189,7 +200,7 @@ if data:
         # ---------------------------------------------------------------------
         # Query expansion
         # ---------------------------------------------------------------------
-        show_query_expansion(data)       
+        show_queries(data)   
 
         # ---------------------------------------------------------------------
         # Trace panel (sidebar-controlled)

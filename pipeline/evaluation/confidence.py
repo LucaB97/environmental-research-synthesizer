@@ -38,7 +38,7 @@ def evaluate_semantic_alignment(chunks, params, top_N):
 
     scores = np.array([c["final_score"] for c in chunks])
     a, b = params["normalization_params"]["a"], params["normalization_params"]["b"]
-
+    
     if scores is None or a is None or b is None:
         return None 
     
@@ -109,7 +109,9 @@ def evaluate_evidence_structure(chunks, params):
     if not chunks:
         return None, None, None
     
-    a, b = params["normalization_params"]["a"], params["normalization_params"]["b"]
+    a,b, std_global = (params["normalization_params"]["a"], 
+                       params["normalization_params"]["b"], 
+                       params["normalization_params"]["std_global"])
     
     q10_contributions, q90_contributions = (params["contributions_per_query"]["q10"],
                                             params["contributions_per_query"]["q90"])
@@ -128,7 +130,8 @@ def evaluate_evidence_structure(chunks, params):
     if std_score < 1e-6:
         z = np.zeros_like(scores)
     else:
-        z = (scores - mean_score) / std_score
+        std = max(std_score, std_global*0.5) 
+        z = (scores - mean_score) / std
 
     # Hits
     abs_relevance = np.array([semantic_norm(s, a, b) for s in scores])
@@ -155,7 +158,7 @@ def evaluate_evidence_structure(chunks, params):
     diversity_score = min(distinct_effective_sources / q90_distinctsources, 1.0)
     balance_score = 1.0 - dominance_ratio
 
-    evidence_structure = 0.5 * density_score + 0.3 * diversity_score + 0.2 * balance_score
+    evidence_structure = 0.4 * density_score + 0.3 * diversity_score + 0.3 * balance_score
     evidence_structure = max(0.0, min(1.0, evidence_structure))
 
     flags = {

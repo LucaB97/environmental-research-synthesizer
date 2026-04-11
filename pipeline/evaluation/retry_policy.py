@@ -1,5 +1,5 @@
 def need_retry_semantic(semantic_alignment_score, evidence_flags):
-    if semantic_alignment_score < 0.25 and not evidence_flags["absent"]:
+    if semantic_alignment_score < 0.5 and not evidence_flags["absent"]:
         return True
 
     if evidence_flags["low_density"]:
@@ -66,7 +66,7 @@ def reason_retry_grounding(metrics):
     # -----------------------------------------
     # 1. Source dominance despite diversity
     # -----------------------------------------
-    if (metrics["available_papers"] > 3 and metrics["paper_dominance"] > 0.7):
+    if (metrics["available_papers"] >= 3 and metrics["paper_dominance"] > 0.7):
         failures["source_dominance"] = metrics["paper_dominance"]
 
     # -----------------------------------------
@@ -79,7 +79,7 @@ def reason_retry_grounding(metrics):
     # 3. No cross-source use despite diversity
     # -----------------------------------------
     if (
-        metrics["available_papers"] > 3 and metrics["multi_source_sentence_ratio"] == 0):
+        metrics["available_papers"] >= 3 and metrics["multi_source_sentence_ratio"] == 0):
         failures["no_corroboration"] = 0.75
     
     if not failures:

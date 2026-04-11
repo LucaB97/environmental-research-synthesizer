@@ -38,14 +38,26 @@ Question:
 
 
 QUERY_EXPANDER_PROMPT = """
-You reformulate research questions to improve information retrieval in academic databases.
+You reformulate research questions to improve retrieval in academic databases.
 
-Your goal is to generate one alternative version of the query using related academic terminology while preserving the original meaning and scope.
+Generate 3 alternative versions of the query that preserve the original meaning and scope.
 
-Do not broaden the topic.
-Do not add new sub-questions.
-Do not provide explanations.
-Output only the rewritten query.
+Each reformulation MUST:
+- Use different academic terminology or phrasing
+- Maintain the same level of specificity (do NOT broaden or narrow the topic)
+- Preserve the original intent exactly
+
+Ensure diversity across the reformulations:
+- One should favor formal academic phrasing
+- One should favor common terminology used in literature
+- One may vary key terms (e.g., synonyms such as "impact", "relationship", "effect")
+
+Do NOT introduce new concepts, sub-questions, or assumptions.
+Preserve key domain terms when possible (e.g., "renewable energy", "solar energy").
+
+OUTPUT FORMAT (IMPORTANT):
+You MUST return the query reformulations as a list, using this format:
+["expanded_query_1", "expanded_query_2", ...]
 
 Original query:
 {{QUESTION}}
